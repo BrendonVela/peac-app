@@ -22,7 +22,7 @@ export function AssignProgramForm({ programId, athletes, assignedIds }: Props) {
       setAssigned(prev => { const next = new Set(prev); next.delete(athleteId); return next })
     } else {
       await assignProgram(programId, athleteId)
-      setAssigned(prev => new Set<string>([...prev, athleteId]))
+      setAssigned(prev => { const next = new Set<string>(prev); next.add(athleteId); return next })
     }
     setLoading(null)
   }
