@@ -48,7 +48,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
             <p className="text-sm text-zinc-400 mt-1">{program.description}</p>
           )}
         </div>
-<form action={async (formData: FormData) => { await deleteProgram(params.id) }}>
+<form action={deleteProgram.bind(null, params.id) as unknown as (formData: FormData) => void}>
           <button type="submit" className="text-zinc-600 hover:text-red-400 transition-colors p-1" title="Delete program">
             <Trash2 className="w-4 h-4" />
           </button>
