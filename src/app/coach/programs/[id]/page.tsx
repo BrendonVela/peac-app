@@ -64,7 +64,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
           <AssignProgramForm
             programId={params.id}
             athletes={athletes ?? []}
-            assignedIds={[...assignedIds]}
+            assignedIds={Array.from(assignedIds)}
           />
         </CardContent>
       </Card>
