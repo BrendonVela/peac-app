@@ -183,7 +183,7 @@ export default async function AthleteDashboard() {
           <CardContent className="px-0 py-0 divide-y divide-zinc-800">
             {recentTests.map((test: any, i: any) => (
               <div key={i} className="flex items-center justify-between px-5 py-3.5">
-                <p className="text-sm text-zinc-300">{test.test_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
+                <p className="text-sm text-zinc-300">{test.test_type.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</p>
                 <span className="text-base font-bold text-blue-400">{test.result} <span className="text-xs font-normal text-zinc-500">{test.unit}</span></span>
               </div>
             ))}
