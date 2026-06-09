@@ -298,7 +298,7 @@ export default function NewProgramPage() {
                             <div key={key}>
                               <label className="text-[10px] text-zinc-500 uppercase">{label}</label>
                               <input
-                                value={(ex as Record<string, string>)[key]}
+                                value={(ex as unknown as Record<string, string>)[key] ?? ''}
                                 onChange={e => updateExercise(block.id, workout.id, ex.id, { [key]: e.target.value })}
                                 placeholder={placeholder}
                                 className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500 mt-0.5"
