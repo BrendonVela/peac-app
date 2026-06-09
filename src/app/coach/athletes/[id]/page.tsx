@@ -98,7 +98,7 @@ export default async function AthleteDetailPage({ params }: { params: { id: stri
             {assignments && assignments.length > 0 ? (
               <div className="space-y-2">
                 {assignments.map(a => {
-                  const program = a.programs as { id: string; title: string } | null
+                  const program = (a.programs as unknown as { id: string; title: string } | null)
                   return program ? (
                     <Link
                       key={a.id}
