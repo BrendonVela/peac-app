@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, GripVertical } from 'l
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea, Select } from '@/components/ui/Input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { createProgram } from '@/app/actions/programs'
 
 import { createClient } from '@/lib/supabase/client'
 import { DAYS_OF_WEEK, EXERCISE_CATEGORIES } from '@/lib/utils'
