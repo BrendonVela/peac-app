@@ -20,7 +20,13 @@ const CATEGORY_COLORS: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'pur
   Conditioning: 'purple',
   Recovery: 'default',
 }
-
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(
+   /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
+  );
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+}
 export default function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
@@ -29,7 +35,7 @@ export default function ExercisesPage() {
   const [editing, setEditing] = useState<Exercise | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+const [openVideoId, setOpenVideoId] = useState<string | null>(null);
   function loadExercises() {
     const supabase = createClient()
     supabase.from('exercises').select('*').order('title').then(({ data }) => setExercises(data ?? []))
@@ -144,16 +150,30 @@ export default function ExercisesPage() {
                 )}
 
                 {ex.video_url && (
-                  <a
-                    href={ex.video_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
-                  >
-                    <Play className="w-3 h-3" />
-                    Watch demo
-                  </a>
-                )}
+  <>
+    {openVideoId !== ex.id ? (
+      <button
+        onClick={() => setOpenVideoId(ex.id)}
+        className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+      >
+        <Play className="w-3 h-3" />
+        Watch demo
+      </button>
+    ) : (
+      getYouTubeEmbedUrl(ex.video_url) && (
+        <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg">
+          <iframe
+            src={getYouTubeEmbedUrl(ex.video_url)!}
+            title={`${ex.title} demo`}
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )
+    )}
+  </>
+)}
               </CardContent>
             </Card>
           ))}

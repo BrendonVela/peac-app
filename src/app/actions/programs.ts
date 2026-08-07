@@ -162,3 +162,25 @@ export async function createAthlete(formData: FormData) {
   if (error) return { error: error.message }
   revalidatePath('/coach/athletes')
 }
+export async function claimAthlete(athleteId: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: coach } = await supabase
+    .from('coaches')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!coach) return { error: 'Coach not found' }
+
+  const { error } = await supabase
+    .from('athletes')
+    .update({ coach_id: coach.id })
+    .eq('id', athleteId)
+    .is('coach_id', null)
+
+  if (error) return { error: error.message }
+  revalidatePath('/coach/athletes')
+}

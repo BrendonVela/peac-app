@@ -4,7 +4,13 @@ import { useState } from 'react'
 import { CheckCircle2, Circle, ExternalLink } from 'lucide-react'
 import { logWorkoutResult } from '@/app/actions/workouts'
 import { cn } from '@/lib/utils'
-
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null
+  const match = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
+  )
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null
+}
 interface Props {
   workoutExerciseId: string
   workoutId: string
@@ -26,6 +32,7 @@ export function WorkoutLogger({
   const [completed, setCompleted] = useState(initialCompleted)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showVideo, setShowVideo] = useState(false)
 
   async function handleSave(isCompleted: boolean) {
     setSaving(true)
@@ -101,17 +108,31 @@ export function WorkoutLogger({
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
         </button>
 
-        {videoUrl && (
-          <a
-            href={videoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 ml-auto"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Demo
-          </a>
-        )}
+       {videoUrl && (
+  <>
+    {!showVideo ? (
+      <button
+        onClick={() => setShowVideo(true)}
+        className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 ml-auto"
+      >
+        <ExternalLink className="w-3.5 h-3.5" />
+        Demo
+      </button>
+    ) : (
+      getYouTubeEmbedUrl(videoUrl) && (
+        <div className="aspect-video w-full overflow-hidden rounded-lg">
+          <iframe
+            src={getYouTubeEmbedUrl(videoUrl)!}
+            title="Exercise demo"
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )
+    )}
+  </>
+)}
       </div>
     </div>
   )

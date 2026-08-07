@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
-import { createAthlete } from '@/app/actions/programs'
+import { createAthlete, claimAthlete } from '@/app/actions/programs'
 import type { Athlete } from '@/types'
 
 export default function AthletesPage() {
@@ -18,7 +18,7 @@ export default function AthletesPage() {
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+const [unclaimed, setUnclaimed] = useState<Athlete[]>([])
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -36,6 +36,12 @@ export default function AthletesPage() {
             .eq('coach_id', coach.id)
             .order('name')
             .then(({ data }) => setAthletes(data ?? []))
+            supabase
+          .from('athletes')
+          .select('*')
+          .is('coach_id', null)
+          .not('user_id', 'is', null)
+          .then(({ data }) => setUnclaimed(data ?? []))
         })
     })
   }, [showModal])
@@ -81,7 +87,32 @@ export default function AthletesPage() {
           className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-
+{unclaimed.length > 0 && (
+  <Card className="border-blue-600/40 bg-blue-600/5">
+    <CardContent className="py-4 space-y-3">
+      <p className="text-sm font-medium text-blue-300">
+        {unclaimed.length} athlete{unclaimed.length > 1 ? 's' : ''} waiting to be claimed
+      </p>
+      {unclaimed.map(athlete => (
+        <div key={athlete.id} className="flex items-center justify-between bg-zinc-900/50 rounded-lg px-3 py-2">
+          <div>
+            <p className="text-sm font-medium text-white">{athlete.name}</p>
+            {athlete.sport && <p className="text-xs text-zinc-500">{athlete.sport}</p>}
+          </div>
+          <Button
+            size="sm"
+            onClick={async () => {
+              await claimAthlete(athlete.id)
+              setUnclaimed(prev => prev.filter(a => a.id !== athlete.id))
+            }}
+          >
+            Claim
+          </Button>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
       {filtered.length > 0 ? (
         <div className="grid gap-3">
           {filtered.map(athlete => (
