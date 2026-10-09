@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { DAYS_OF_WEEK } from '@/lib/utils'
 import { deleteProgram } from '@/app/actions/programs'
 import { AssignProgramForm } from './AssignProgramForm'
 import { ExerciseVideo } from '@/components/ExerciseVideo'
@@ -94,13 +93,13 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                 </CardHeader>
                 <CardContent className="space-y-4 pt-0">
                   {workouts.length > 0 ? (
-                    workouts.map((workout: any) => {
+                    workouts.map((workout: any, wIdx: number) => {
                       const wxs = (workout.workout_exercises ?? []).sort((a: any, b: any) => a.order - b.order)
                       return (
                         <div key={workout.id} className="border border-zinc-800 rounded-xl overflow-hidden">
                           <div className="flex items-center gap-3 px-4 py-3 bg-zinc-800/30">
                             <span className="text-sm font-semibold text-white">{workout.title}</span>
-                            <Badge>{DAYS_OF_WEEK[workout.day_of_week]}</Badge>
+                            <Badge>Day {wIdx + 1}</Badge>
                           </div>
 
                           {wxs.length > 0 ? (

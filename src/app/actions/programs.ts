@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { todayISO } from '@/lib/schedule'
 
 interface WorkoutExerciseDraft {
   exercise_id: string
@@ -109,10 +110,14 @@ export async function createProgram(payload: ProgramPayload) {
 
 export async function assignProgram(programId: string, athleteId: string) {
   const supabase = createClient()
-  const { error } = await supabase.from('program_assignments').upsert({
-    program_id: programId,
-    athlete_id: athleteId,
-  })
+  const { error } = await supabase.from('program_assignments').upsert(
+    {
+      program_id: programId,
+      athlete_id: athleteId,
+      start_date: todayISO(),
+    },
+    { onConflict: 'program_id,athlete_id' }
+  )
   if (error) return { error: error.message }
   revalidatePath(`/coach/programs/${programId}`)
 }

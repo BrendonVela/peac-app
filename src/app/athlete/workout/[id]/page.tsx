@@ -6,6 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { WorkoutLogger } from './WorkoutLogger'
 
+// "8" -> "8 reps", but "8 reps" or "20yd" stays as-is
+function formatReps(reps: string): string {
+  const r = String(reps).trim()
+  return /^\d+$/.test(r) ? `${r} reps` : r
+}
+
 export default async function WorkoutPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -38,6 +44,9 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
     .eq('workout_id', params.id)
 
   const resultMap = new Map(results?.map(r => [r.workout_exercise_id, r]) ?? [])
+  const doneCount = exercises.filter((wx: any) => resultMap.get(wx.id)?.completed).length
+  const status =
+    exercises.length > 0 && doneCount === exercises.length ? 'done' : doneCount > 0 ? 'in_progress' : 'not_started'
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -50,6 +59,23 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
           {workout.notes && <p className="text-sm text-zinc-400 mt-0.5">{workout.notes}</p>}
         </div>
       </div>
+
+      {exercises.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-zinc-400">{doneCount} of {exercises.length} exercises complete</span>
+            <Badge variant={status === 'done' ? 'green' : status === 'in_progress' ? 'blue' : 'default'}>
+              {status === 'done' ? 'Done' : status === 'in_progress' ? 'In progress' : 'Not started'}
+            </Badge>
+          </div>
+          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
+              style={{ width: `${Math.round((doneCount / exercises.length) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {exercises.length > 0 ? (
         <div className="space-y-4">
@@ -67,7 +93,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         {wx.sets && <span className="text-xs text-zinc-400">{wx.sets} sets</span>}
-                        {wx.reps && <span className="text-xs text-zinc-400">{wx.reps} reps</span>}
+                        {wx.reps && <span className="text-xs text-zinc-400">{formatReps(wx.reps)}</span>}
                         {wx.load && <span className="text-xs text-zinc-400">{wx.load}</span>}
                         {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
                         {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}

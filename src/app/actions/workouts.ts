@@ -31,6 +31,7 @@ export async function logWorkoutResult(
         reps_completed: data.reps_completed ?? null,
         completed: data.completed,
         notes: data.notes ?? null,
+        logged_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
 
@@ -50,4 +51,6 @@ export async function logWorkoutResult(
   }
 
   revalidatePath(`/athlete/workout/${workoutId}`)
+  revalidatePath('/athlete/dashboard')
+  revalidatePath('/athlete/calendar')
 }

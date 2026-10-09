@@ -5,13 +5,14 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Dumbbell, TrendingUp,
-  Heart, MessageCircle, LogOut, Menu, X, Zap,
+  Heart, MessageCircle, LogOut, Menu, X, Zap, CalendarDays,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/app/actions/auth'
 
 const nav = [
   { href: '/athlete/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/athlete/calendar',  icon: CalendarDays,    label: 'Calendar'  },
   { href: '/athlete/progress',  icon: TrendingUp,      label: 'Progress'  },
   { href: '/athlete/checkin',   icon: Heart,           label: 'Check-In'  },
   { href: '/athlete/messages',  icon: MessageCircle,   label: 'Messages'  },
