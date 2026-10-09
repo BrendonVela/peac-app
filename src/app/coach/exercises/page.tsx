@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Search, Pencil, Trash2, Play } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, Play, VideoOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -12,6 +12,8 @@ import { createExercise, updateExercise, deleteExercise } from '@/app/actions/ex
 import { EXERCISE_CATEGORIES } from '@/lib/utils'
 import type { Exercise } from '@/types'
 
+const NO_VIDEO = 'No Video'
+
 const CATEGORY_COLORS: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'default'> = {
   Speed: 'blue',
   Strength: 'red',
@@ -19,14 +21,18 @@ const CATEGORY_COLORS: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'pur
   Mobility: 'green',
   Conditioning: 'purple',
   Recovery: 'default',
+  Core: 'purple',
+  'Med Ball': 'yellow',
 }
+
 function getYouTubeEmbedUrl(url: string): string | null {
-  if (!url) return null;
+  if (!url) return null
   const match = url.match(
-   /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
-  );
-  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
+  )
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null
 }
+
 export default function ExercisesPage() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
@@ -35,7 +41,8 @@ export default function ExercisesPage() {
   const [editing, setEditing] = useState<Exercise | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-const [openVideoId, setOpenVideoId] = useState<string | null>(null);
+  const [openVideoId, setOpenVideoId] = useState<string | null>(null)
+
   function loadExercises() {
     const supabase = createClient()
     supabase.from('exercises').select('*').order('title').then(({ data }) => setExercises(data ?? []))
@@ -43,9 +50,13 @@ const [openVideoId, setOpenVideoId] = useState<string | null>(null);
 
   useEffect(() => { loadExercises() }, [])
 
+  const noVideoCount = exercises.filter(e => !e.video_url).length
+
   const filtered = exercises.filter(e => {
     const matchSearch = e.title.toLowerCase().includes(search.toLowerCase())
-    const matchCat = category === 'All' || e.category === category
+    const matchCat =
+      category === 'All' ||
+      (category === NO_VIDEO ? !e.video_url : e.category === category)
     return matchSearch && matchCat
   })
 
@@ -70,21 +81,32 @@ const [openVideoId, setOpenVideoId] = useState<string | null>(null);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this exercise?')) return
-    await deleteExercise(id)
+  async function handleDelete(ex: Exercise) {
+    const msg = ex.video_url
+      ? `Delete "${ex.title}"?`
+      : `Delete "${ex.title}"? It will also be removed from any programs that use it.`
+    if (!confirm(msg)) return
+    const result: any = await deleteExercise(ex.id)
+    if (result?.error) {
+      alert(`Could not delete: ${result.error}`)
+    }
     loadExercises()
   }
 
-  function openNew() { setEditing(null); setShowModal(true) }
-  function openEdit(ex: Exercise) { setEditing(ex); setShowModal(true) }
+  function openNew() { setEditing(null); setError(''); setShowModal(true) }
+  function openEdit(ex: Exercise) { setEditing(ex); setError(''); setShowModal(true) }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Exercise Library</h1>
-          <p className="text-zinc-400 text-sm mt-0.5">{exercises.length} exercises</p>
+          <p className="text-zinc-400 text-sm mt-0.5">
+            {exercises.length} exercises
+            {noVideoCount > 0 && (
+              <span className="text-amber-400"> · {noVideoCount} without video</span>
+            )}
+          </p>
         </div>
         <Button size="sm" onClick={openNew}>
           <Plus className="w-4 h-4" />
@@ -116,26 +138,42 @@ const [openVideoId, setOpenVideoId] = useState<string | null>(null);
               {cat}
             </button>
           ))}
+
+          {/* No Video filter */}
+          <button
+            onClick={() => setCategory(NO_VIDEO)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              category === NO_VIDEO
+                ? 'bg-amber-500 border-amber-500 text-black'
+                : 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+            }`}
+          >
+            <VideoOff className="w-3.5 h-3.5" />
+            No Video ({noVideoCount})
+          </button>
         </div>
       </div>
 
       {filtered.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(ex => (
-            <Card key={ex.id} className="hover:border-zinc-700 transition-colors">
+            <Card
+              key={ex.id}
+              className={`hover:border-zinc-700 transition-colors ${!ex.video_url ? 'border-amber-500/30' : ''}`}
+            >
               <CardContent className="py-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white text-sm truncate">{ex.title}</h3>
+                    <h3 className="font-semibold text-white text-sm truncate" title={ex.title}>{ex.title}</h3>
                     <Badge variant={CATEGORY_COLORS[ex.category] ?? 'default'} className="mt-1">
                       {ex.category}
                     </Badge>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openEdit(ex)} className="text-zinc-500 hover:text-white p-1">
+                    <button onClick={() => openEdit(ex)} className="text-zinc-500 hover:text-white p-1" title="Edit">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleDelete(ex.id)} className="text-zinc-500 hover:text-red-400 p-1">
+                    <button onClick={() => handleDelete(ex)} className="text-zinc-500 hover:text-red-400 p-1" title="Delete">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -149,31 +187,42 @@ const [openVideoId, setOpenVideoId] = useState<string | null>(null);
                   <p className="text-xs text-zinc-500 italic line-clamp-2">&ldquo;{ex.coaching_cues}&rdquo;</p>
                 )}
 
-                {ex.video_url && (
-  <>
-    {openVideoId !== ex.id ? (
-      <button
-        onClick={() => setOpenVideoId(ex.id)}
-        className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
-      >
-        <Play className="w-3 h-3" />
-        Watch demo
-      </button>
-    ) : (
-      getYouTubeEmbedUrl(ex.video_url) && (
-        <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg">
-          <iframe
-            src={getYouTubeEmbedUrl(ex.video_url)!}
-            title={`${ex.title} demo`}
-            className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      )
-    )}
-  </>
-)}
+                {ex.video_url ? (
+                  openVideoId !== ex.id ? (
+                    <button
+                      onClick={() => setOpenVideoId(ex.id)}
+                      className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      <Play className="w-3 h-3" />
+                      Watch demo
+                    </button>
+                  ) : (
+                    getYouTubeEmbedUrl(ex.video_url) && (
+                      <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg">
+                        <iframe
+                          src={getYouTubeEmbedUrl(ex.video_url)!}
+                          title={`${ex.title} demo`}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1.5 text-xs text-amber-400">
+                      <VideoOff className="w-3 h-3" />
+                      No video
+                    </span>
+                    <button
+                      onClick={() => openEdit(ex)}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      + Add video
+                    </button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -182,7 +231,11 @@ const [openVideoId, setOpenVideoId] = useState<string | null>(null);
         <Card>
           <CardContent className="py-16 text-center">
             <p className="text-zinc-400 mb-3">
-              {search || category !== 'All' ? 'No exercises match your filters.' : 'No exercises yet.'}
+              {category === NO_VIDEO && !search
+                ? 'Every exercise has a video.'
+                : search || category !== 'All'
+                  ? 'No exercises match your filters.'
+                  : 'No exercises yet.'}
             </p>
             {!search && category === 'All' && (
               <Button onClick={openNew} variant="secondary" size="sm">Add your first exercise</Button>

@@ -14,7 +14,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [role, setRole] = useState<'coach' | 'athlete'>('athlete')
-
+const [inviteCode, setInviteCode] = useState('')
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
@@ -45,10 +45,17 @@ export default function RegisterPage() {
       return
     }
 
-    if (role === 'coach') {
-      await supabase.from('coaches').insert({ user_id: data.user.id, name })
-      router.push('/coach/dashboard')
-    } else {
+   if (role === 'coach') {
+  const { error: claimError } = await supabase.rpc('claim_coach_role', {
+    invite_code: inviteCode,
+  })
+  if (claimError) {
+    setError('Invalid coach invite code.')
+    setLoading(false)
+    return
+  }
+  router.push('/coach/dashboard')
+} else {
       await supabase.from('athletes').insert({ user_id: data.user.id, name })
       router.push('/athlete/dashboard')
     }
@@ -88,7 +95,18 @@ export default function RegisterPage() {
                 ))}
               </div>
             </div>
-
+{role === 'coach' && (
+  <Input
+    label="Coach Invite Code"
+    id="inviteCode"
+    name="inviteCode"
+    type="text"
+    placeholder="Enter your invite code"
+    required
+    value={inviteCode}
+    onChange={(e) => setInviteCode(e.target.value)}
+  />
+)}
             <Input label="Full Name" id="name" name="name" type="text" placeholder="John Smith" required />
             <Input label="Email" id="email" name="email" type="email" placeholder="you@example.com" required autoComplete="email" />
             <Input label="Password" id="password" name="password" type="password" placeholder="••••••••" required minLength={6} autoComplete="new-password" />

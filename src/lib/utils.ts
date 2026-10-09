@@ -21,7 +21,7 @@ export const ALL_TEST_TYPES: TestType[] = [
 ]
 
 export const EXERCISE_CATEGORIES = [
-  'Speed', 'Strength', 'Plyometrics', 'Mobility', 'Conditioning', 'Recovery',
+  'Speed', 'Strength', 'Plyometrics', 'Mobility', 'Conditioning', 'Recovery', 'Core', 'Med Ball',
 ] as const
 
 export const DAYS_OF_WEEK = [

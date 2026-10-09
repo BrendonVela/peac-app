@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronRight, Pencil, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
-import { createAthlete, claimAthlete } from '@/app/actions/programs'
+import { createAthlete, claimAthlete, updateAthlete, unclaimAthlete } from '@/app/actions/programs'
 import type { Athlete } from '@/types'
 
 export default function AthletesPage() {
@@ -19,6 +19,9 @@ export default function AthletesPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 const [unclaimed, setUnclaimed] = useState<Athlete[]>([])
+const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null)
+const [editError, setEditError] = useState('')
+const [editLoading, setEditLoading] = useState(false)
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -64,7 +67,53 @@ const [unclaimed, setUnclaimed] = useState<Athlete[]>([])
       setLoading(false)
     }
   }
+async function handleEditSubmit(e: React.FormEvent<HTMLFormElement>) {
+  e.preventDefault()
+  if (!editingAthlete) return
+  setEditLoading(true)
+  setEditError('')
 
+  const form = new FormData(e.currentTarget)
+  const result = await updateAthlete(editingAthlete.id, {
+    name: form.get('name') as string,
+    sport: form.get('sport') as string,
+    position: form.get('position') as string,
+    graduation_year: form.get('graduation_year')
+      ? parseInt(form.get('graduation_year') as string)
+      : null,
+  })
+
+  if (result?.error) {
+    setEditError(result.error)
+    setEditLoading(false)
+  } else {
+    setAthletes(prev =>
+      prev.map(a =>
+        a.id === editingAthlete.id
+          ? {
+              ...a,
+              name: form.get('name') as string,
+              sport: form.get('sport') as string,
+              position: form.get('position') as string,
+              graduation_year: form.get('graduation_year')
+                ? parseInt(form.get('graduation_year') as string)
+                : null,
+            }
+          : a
+      )
+    )
+    setEditingAthlete(null)
+    setEditLoading(false)
+  }
+}
+
+async function handleUnclaim(athleteId: string) {
+  if (!confirm('Remove this athlete from your roster? They will become unclaimed.')) return
+  const result = await unclaimAthlete(athleteId)
+  if (!result?.error) {
+    setAthletes(prev => prev.filter(a => a.id !== athleteId))
+  }
+}
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -134,10 +183,34 @@ const [unclaimed, setUnclaimed] = useState<Athlete[]>([])
                       </div>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-600" />
-                </CardContent>
-              </Card>
-            </Link>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setEditingAthlete(athlete)
+                  setEditError('')
+                }}
+                className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleUnclaim(athlete.id)
+                }}
+                className="p-1.5 rounded-md hover:bg-red-900/30 text-zinc-400 hover:text-red-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <ChevronRight className="w-4 h-4 text-zinc-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
           ))}
         </div>
       ) : (

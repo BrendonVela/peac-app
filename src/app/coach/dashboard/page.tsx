@@ -54,45 +54,45 @@ export default async function CoachDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Total Athletes</div>
-          <div style={{ fontSize: '32px', fontWeight: '600' }}>{athletes?.length ?? 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: '600', color: '#111' }}>{athletes?.length ?? 0}</div>
         </div>
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Active Programs</div>
-          <div style={{ fontSize: '32px', fontWeight: '600' }}>{programs?.length ?? 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: '600', color: '#111' }}>{programs?.length ?? 0}</div>
         </div>
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Check-ins Today</div>
-          <div style={{ fontSize: '32px', fontWeight: '600' }}>{checkIns?.length ?? 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: '600', color: '#111' }}>{checkIns?.length ?? 0}</div>
         </div>
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Recent Results</div>
-          <div style={{ fontSize: '32px', fontWeight: '600' }}>{recentResults?.length ?? 0}</div>
+          <div style={{ fontSize: '32px', fontWeight: '600', color: '#111' }}>{recentResults?.length ?? 0}</div>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Your Athletes</h2>
+          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: '#111' }}>Your Athletes</h2>
           {(athletes ?? []).length === 0 ? (
             <p style={{ color: '#666', fontSize: '14px' }}>No athletes yet. <Link href="/coach/athletes/new" style={{ color: '#1d6ef5' }}>Add one</Link></p>
           ) : (
             (athletes ?? []).map((a: any) => (
               <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ fontWeight: '500', fontSize: '14px' }}>{a.name}</div>
-                <div style={{ color: '#666', fontSize: '13px' }}>{a.sport}</div>
+                
+                <div style={{ fontWeight: '500', fontSize: '14px', color: '#111' }}>{a.name}</div>
               </div>
             ))
           )}
         </div>
 
         <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Programs</h2>
+          <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: '#111' }}>Programs</h2>
           {(programs ?? []).length === 0 ? (
             <p style={{ color: '#666', fontSize: '14px' }}>No programs yet. <Link href="/coach/programs/new" style={{ color: '#1d6ef5' }}>Create one</Link></p>
           ) : (
             (programs ?? []).map((p: any) => (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ fontWeight: '500', fontSize: '14px' }}>{p.title}</div>
+                <div style={{ fontWeight: '500', fontSize: '14px', color: '#111' }}>{p.title}</div>
               </div>
             ))
           )}

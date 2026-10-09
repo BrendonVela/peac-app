@@ -184,3 +184,60 @@ export async function claimAthlete(athleteId: string) {
   if (error) return { error: error.message }
   revalidatePath('/coach/athletes')
 }
+export async function updateAthlete(athleteId: string, payload: {
+  name: string
+  sport: string
+  position: string
+  graduation_year: number | null
+}) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: coach } = await supabase
+    .from('coaches')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!coach) return { error: 'Coach profile not found' }
+
+  const { error } = await supabase
+    .from('athletes')
+    .update({
+      name: payload.name,
+      sport: payload.sport || null,
+      position: payload.position || null,
+      graduation_year: payload.graduation_year,
+    })
+    .eq('id', athleteId)
+    .eq('coach_id', coach.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/coach/athletes')
+  return { success: true }
+}
+
+export async function unclaimAthlete(athleteId: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { data: coach } = await supabase
+    .from('coaches')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!coach) return { error: 'Coach profile not found' }
+
+  const { error } = await supabase
+    .from('athletes')
+    .update({ coach_id: null })
+    .eq('id', athleteId)
+    .eq('coach_id', coach.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/coach/athletes')
+  return { success: true }
+}

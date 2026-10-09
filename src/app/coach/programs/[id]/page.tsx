@@ -4,9 +4,17 @@ import Link from 'next/link'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { DAYS_OF_WEEK, formatDate } from '@/lib/utils'
+import { DAYS_OF_WEEK } from '@/lib/utils'
 import { deleteProgram } from '@/app/actions/programs'
 import { AssignProgramForm } from './AssignProgramForm'
+import { ExerciseVideo } from '@/components/ExerciseVideo'
+
+// "8" -> "8 reps", but "8 reps" or "20yd" stays as-is
+function formatReps(reps: string): string {
+  const r = String(reps).trim()
+  if (/^\d+$/.test(r)) return `${r} reps`
+  return r
+}
 
 export default async function ProgramDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -27,7 +35,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
   const [{ data: blocks }, { data: athletes }, { data: assignments }] = await Promise.all([
     supabase
       .from('training_blocks')
-      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, exercises(title, category)))')
+      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, exercises(title, category, video_url)))')
       .eq('program_id', params.id)
       .order('order'),
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id),
@@ -48,7 +56,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
             <p className="text-sm text-zinc-400 mt-1">{program.description}</p>
           )}
         </div>
-<form action={deleteProgram.bind(null, params.id) as unknown as (formData: FormData) => void}>
+        <form action={deleteProgram.bind(null, params.id) as unknown as (formData: FormData) => void}>
           <button type="submit" className="text-zinc-600 hover:text-red-400 transition-colors p-1" title="Delete program">
             <Trash2 className="w-4 h-4" />
           </button>
@@ -73,7 +81,9 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
       {blocks && blocks.length > 0 ? (
         <div className="space-y-4">
           {blocks.map(block => {
-            const workouts = (block.workouts as any[]) ?? []
+            const workouts = ((block.workouts as any[]) ?? []).sort(
+              (a: any, b: any) => (a.day_of_week ?? 0) - (b.day_of_week ?? 0)
+            )
             return (
               <Card key={block.id}>
                 <CardHeader>
@@ -102,12 +112,13 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                     <p className="text-sm font-medium text-white">{wx.exercises?.title}</p>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                                       {wx.sets && <span className="text-xs text-zinc-400">{wx.sets} sets</span>}
-                                      {wx.reps && <span className="text-xs text-zinc-400">{wx.reps} reps</span>}
+                                      {wx.reps && <span className="text-xs text-zinc-400">{formatReps(wx.reps)}</span>}
                                       {wx.load && <span className="text-xs text-zinc-400">{wx.load}</span>}
                                       {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
                                       {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}
                                     </div>
                                     {wx.notes && <p className="text-xs text-zinc-500 mt-1 italic">{wx.notes}</p>}
+                                    <ExerciseVideo url={wx.exercises?.video_url} title={wx.exercises?.title} />
                                   </div>
                                   {wx.exercises?.category && (
                                     <Badge variant="default" className="shrink-0">{wx.exercises.category}</Badge>
