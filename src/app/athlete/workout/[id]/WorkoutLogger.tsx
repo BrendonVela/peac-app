@@ -1,16 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, ExternalLink } from 'lucide-react'
+import { CheckCircle2, Circle, Play, X, VideoOff, ExternalLink } from 'lucide-react'
 import { logWorkoutResult } from '@/app/actions/workouts'
 import { cn } from '@/lib/utils'
+
 function getYouTubeEmbedUrl(url: string): string | null {
   if (!url) return null
   const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
   )
   return match ? `https://www.youtube.com/embed/${match[1]}` : null
 }
+
 interface Props {
   workoutExerciseId: string
   workoutId: string
@@ -33,6 +35,8 @@ export function WorkoutLogger({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
+
+  const embedUrl = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null
 
   async function handleSave(isCompleted: boolean) {
     setSaving(true)
@@ -82,12 +86,13 @@ export function WorkoutLogger({
         className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
-      <div className="flex items-center gap-3">
+      {/* Buttons row */}
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => handleSave(!completed)}
           disabled={saving}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap',
             completed
               ? 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/30'
               : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600'
@@ -103,37 +108,52 @@ export function WorkoutLogger({
         <button
           onClick={() => handleSave(completed)}
           disabled={saving}
-          className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all"
+          className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all whitespace-nowrap"
         >
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
         </button>
 
-       {videoUrl && (
-  <>
-    {!showVideo ? (
-      <button
-        onClick={() => setShowVideo(true)}
-        className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 ml-auto"
-      >
-        <ExternalLink className="w-3.5 h-3.5" />
-        Demo
-      </button>
-    ) : (
-      getYouTubeEmbedUrl(videoUrl) && (
-        <div className="aspect-video w-full overflow-hidden rounded-lg">
+        {/* Video control (right side) */}
+        <div className="ml-auto">
+          {!videoUrl ? (
+            <span className="flex items-center gap-1.5 text-sm text-amber-400">
+              <VideoOff className="w-3.5 h-3.5" />
+              No video
+            </span>
+          ) : embedUrl ? (
+            <button
+              onClick={() => setShowVideo(!showVideo)}
+              className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 whitespace-nowrap"
+            >
+              {showVideo ? <X className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {showVideo ? 'Hide demo' : 'Watch demo'}
+            </button>
+          ) : (
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 whitespace-nowrap"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Watch demo
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Video: full width, below the buttons */}
+      {showVideo && embedUrl && (
+        <div className="aspect-video w-full overflow-hidden rounded-lg border border-zinc-800">
           <iframe
-            src={getYouTubeEmbedUrl(videoUrl)!}
+            src={embedUrl}
             title="Exercise demo"
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         </div>
-      )
-    )}
-  </>
-)}
-      </div>
+      )}
     </div>
   )
 }
