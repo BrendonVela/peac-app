@@ -77,7 +77,7 @@ export async function importProgramFromExcel(formData: FormData) {
   const noVideo: string[] = []
   let createdCount = 0
 
-  for (const [name, section] of nameToSection.entries()) {
+   for (const [name, section] of Array.from(nameToSection.entries())) {
     const key = name.trim().toLowerCase()
     if (nameToId.has(key)) continue
 
