@@ -193,6 +193,7 @@ async function handleUnclaim(athleteId: string) {
                   setEditError('')
                 }}
                 className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                title="Edit athlete"
               >
                 <Pencil className="w-4 h-4" />
               </button>
@@ -203,6 +204,7 @@ async function handleUnclaim(athleteId: string) {
                   handleUnclaim(athlete.id)
                 }}
                 className="p-1.5 rounded-md hover:bg-red-900/30 text-zinc-400 hover:text-red-400"
+                title="Remove from roster"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -227,6 +229,40 @@ async function handleUnclaim(athleteId: string) {
           </CardContent>
         </Card>
       )}
+
+      <Modal
+        open={!!editingAthlete}
+        onClose={() => setEditingAthlete(null)}
+        title="Edit Athlete"
+      >
+        {editingAthlete && (
+          <form key={editingAthlete.id} onSubmit={handleEditSubmit} className="space-y-4">
+            <Input label="Full Name" name="name" defaultValue={editingAthlete.name} required />
+            <Input label="Sport" name="sport" defaultValue={editingAthlete.sport ?? ''} placeholder="Football" />
+            <Input label="Position" name="position" defaultValue={editingAthlete.position ?? ''} placeholder="Wide Receiver" />
+            <Input
+              label="Graduation Year"
+              name="graduation_year"
+              type="number"
+              defaultValue={editingAthlete.graduation_year ?? ''}
+              placeholder="2026"
+              min={2020}
+              max={2035}
+            />
+
+            {editError && <p className="text-sm text-red-400">{editError}</p>}
+
+            <div className="flex gap-3 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setEditingAthlete(null)} className="flex-1">
+                Cancel
+              </Button>
+              <Button type="submit" loading={editLoading} className="flex-1">
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Add Athlete">
         <form onSubmit={handleAdd} className="space-y-4">
