@@ -1,9 +1,9 @@
 // src/lib/schedule.ts
 // Week-based scheduling for assigned programs.
 //
-// - Week 1 starts on the assignment's start date (the day the coach assigned it).
-// - Each program week is the 7 days that follow.
-// - Every workout gets a suggested ("planned") day spread across its week.
+// - Weeks run Monday -> Sunday.
+// - Week 1 is the Monday-Sunday week that contains the assignment's start date.
+// - Every workout gets a suggested ("planned") day spread across Mon-Fri of its week.
 //   Coaches and athletes can move it to any date (stored per athlete in workout_schedule).
 // - Status: done (all exercises complete), in_progress (some), not_started,
 //   missed (its week is over and it isn't done).
@@ -32,6 +32,19 @@ export function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+/** The Monday on or before a date */
+export function startOfWeek(iso: string): string {
+  const dow = (new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7 // Mon = 0
+  return addDays(iso, -dow)
+}
+
+/** Suggested day offset (0 = Monday) for workout k of n in a week */
+function suggestedOffset(k: number, n: number): number {
+  if (n <= 1) return 0 // Monday
+  if (n <= 5) return Math.round((k * 4) / (n - 1)) // spread Mon-Fri (4 -> Mon, Tue, Thu, Fri)
+  return Math.min(6, Math.round((k * 6) / (n - 1))) // 6-7 workouts: use the whole week
 }
 
 /** a - b in days */
@@ -182,14 +195,12 @@ export async function getAthleteSchedule(supabase: any, athleteId: string): Prom
           ((x.day_of_week ?? 0) - (y.day_of_week ?? 0)) ||
           String(x.title).localeCompare(String(y.title))
       )
-      const weekStart = addDays(startDate, (wn - 1) * 7)
+      const weekStart = addDays(startOfWeek(startDate), (wn - 1) * 7)
       const weekEnd = addDays(weekStart, 6)
       const n = workouts.length
 
       workouts.forEach((w, k) => {
-        // Spread workouts across the week (4 workouts -> days 0, 2, 4, 5)
-        const offset = Math.min(6, Math.round((k * 7) / Math.max(n, 1)))
-        const defaultDate = addDays(weekStart, offset)
+        const defaultDate = addDays(weekStart, suggestedOffset(k, n))
         const override = overrides.get(w.id)
 
         const wxIds: string[] = ((w.workout_exercises ?? []) as any[]).map(x => x.id)
