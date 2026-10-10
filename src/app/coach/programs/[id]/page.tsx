@@ -34,7 +34,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
   const [{ data: blocks }, { data: athletes }, { data: assignments }] = await Promise.all([
     supabase
       .from('training_blocks')
-      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, exercises(title, category, video_url)))')
+      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, warmup, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, section, exercises(title, category, video_url)))')
       .eq('program_id', params.id)
       .order('order'),
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id),
@@ -102,10 +102,29 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                             <Badge>Day {wIdx + 1}</Badge>
                           </div>
 
+                          {Array.isArray(workout.warmup?.items) && workout.warmup.items.length > 0 && (
+                            <details className="border-b border-zinc-800 group">
+                              <summary className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-orange-400 cursor-pointer select-none hover:bg-zinc-800/30">
+                                {workout.warmup.title || 'Warm-up'} · {workout.warmup.items.length} items
+                              </summary>
+                              <ol className="px-4 pb-3 space-y-1 list-decimal list-inside text-xs text-zinc-400">
+                                {workout.warmup.items.map((item: string, k: number) => (
+                                  <li key={k}>{item}</li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
+
                           {wxs.length > 0 ? (
                             <div className="divide-y divide-zinc-800">
                               {wxs.map((wx: any, i: number) => (
-                                <div key={wx.id} className="flex items-start gap-4 px-4 py-3">
+                                <div key={wx.id}>
+                                {wx.section && wx.section !== wxs[i - 1]?.section && (
+                                  <div className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                                    {String(wx.section).replace(/^★\s*/, '')}
+                                  </div>
+                                )}
+                                <div className="flex items-start gap-4 px-4 py-3">
                                   <span className="text-xs text-zinc-600 font-mono w-5 shrink-0 mt-0.5">{i + 1}.</span>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-white">{wx.exercises?.title}</p>
@@ -131,6 +150,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                   {wx.exercises?.category && (
                                     <Badge variant="default" className="shrink-0">{wx.exercises.category}</Badge>
                                   )}
+                                </div>
                                 </div>
                               ))}
                             </div>

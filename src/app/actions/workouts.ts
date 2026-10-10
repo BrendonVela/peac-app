@@ -57,3 +57,17 @@ export async function logWorkoutResult(
   revalidatePath('/athlete/dashboard')
   revalidatePath('/athlete/calendar')
 }
+
+
+/** Save which warm-up items are checked off */
+export async function saveWarmupProgress(athleteId: string, workoutId: string, done: number[]) {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('warmup_logs')
+    .upsert(
+      { athlete_id: athleteId, workout_id: workoutId, done, updated_at: new Date().toISOString() },
+      { onConflict: 'athlete_id,workout_id' }
+    )
+  if (error) return { error: error.message }
+  return { ok: true }
+}

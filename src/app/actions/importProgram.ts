@@ -156,6 +156,7 @@ export async function importProgramFromExcel(formData: FormData) {
           title: day.title,
           day_of_week: dayIdx + 1,
           notes: null,
+          warmup: day.warmup,
         })
         .select('id')
         .single()
@@ -180,6 +181,7 @@ export async function importProgramFromExcel(formData: FormData) {
             tempo: null,
             rest: null,
             notes: ex.coachingNote,
+            section: ex.section,
             order: i + 1,
             set_targets: varies
               ? ex.sets.map(st => ({ label: st.setLabel, weight: st.prescWt, reps: st.prescReps }))

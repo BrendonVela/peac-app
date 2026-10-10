@@ -13,9 +13,19 @@ export interface ParsedExercise {
   sets: ParsedSet[]
 }
 
+export interface ParsedWarmup {
+  title: string
+  items: string[]
+}
+
 export interface ParsedDay {
   title: string
+  warmup: ParsedWarmup | null
   exercises: ParsedExercise[]
+}
+
+function isWarmupSection(section: string | null): boolean {
+  return !!section && /WARM[\s-]?UP/i.test(section)
 }
 
 export interface ParsedWeek {
@@ -62,8 +72,9 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       coachingNote: string | null
       sets: { setLabel: string; weeks: Record<number, { prescWt: any; prescReps: any }> }[]
     }
-    const rawDays: { title: string; exercises: RawExercise[] }[] = []
-    let currentDay: { title: string; exercises: RawExercise[] } | null = null
+    type RawDay = { title: string; warmup: ParsedWarmup | null; exercises: RawExercise[] }
+    const rawDays: RawDay[] = []
+    let currentDay: RawDay | null = null
     let currentSection: string | null = null
     let i = headerRowIdx + 1
 
@@ -73,7 +84,8 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       const firstTrimmed = typeof first === 'string' ? first.trim() : first
 
       if (typeof firstTrimmed === 'string' && firstTrimmed.startsWith('DAY ')) {
-        currentDay = { title: firstTrimmed, exercises: [] }
+        currentDay = { title: firstTrimmed, warmup: null, exercises: [] }
+        currentSection = null
         rawDays.push(currentDay)
         i++
         continue
@@ -81,8 +93,25 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
 
       if (typeof firstTrimmed === 'string' && firstTrimmed.startsWith('▸')) {
         currentSection = firstTrimmed.replace('▸', '').trim()
+        if (currentDay && isWarmupSection(currentSection) && !currentDay.warmup) {
+          currentDay.warmup = { title: currentSection, items: [] }
+        }
         i++
         continue
+      }
+
+      // Warm-up lines look like "    1.  Foam Roll: T-Spine — 60 sec each"
+      if (
+        currentDay?.warmup &&
+        isWarmupSection(currentSection) &&
+        typeof firstTrimmed === 'string'
+      ) {
+        const m = firstTrimmed.match(/^\d+\.\s*(.+)$/)
+        if (m) {
+          currentDay.warmup.items.push(m[1].trim())
+          i++
+          continue
+        }
       }
 
       if (typeof first === 'number' && row[1]) {
@@ -141,7 +170,11 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       }
 
       for (const rawDay of rawDays) {
-        const day: ParsedDay = { title: rawDay.title, exercises: [] }
+        const day: ParsedDay = {
+          title: rawDay.title,
+          warmup: rawDay.warmup && rawDay.warmup.items.length > 0 ? rawDay.warmup : null,
+          exercises: [],
+        }
         for (const rawEx of rawDay.exercises) {
           const setsThisWeek = rawEx.sets
             .filter(s => s.weeks[wb.week])
