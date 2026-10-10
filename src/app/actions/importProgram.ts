@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { parseExcelProgram } from '@/lib/parseExcelProgram'
 import { createExerciseMatcher } from '@/lib/exerciseMatcher'
+import { liftForExercise } from '@/lib/maxes'
 
 function guessCategory(section: string | null): string {
   const s = (section || '').toUpperCase()
@@ -168,6 +169,8 @@ export async function importProgramFromExcel(formData: FormData) {
         .filter((ex) => nameToId.has(ex.name.trim().toLowerCase()))
         .map((ex, i) => {
           const firstSet = ex.sets[0]
+          const lift = liftForExercise(ex.name)
+          const refMax = lift ? week.refMaxes[lift] ?? null : null
           // Keep every set's target when they differ (e.g. pyramids)
           const varies = ex.sets.some(
             st => st.prescWt !== firstSet?.prescWt || st.prescReps !== firstSet?.prescReps
@@ -182,6 +185,8 @@ export async function importProgramFromExcel(formData: FormData) {
             rest: null,
             notes: ex.coachingNote,
             section: ex.section,
+            max_lift: lift && refMax ? lift : null,
+            ref_max: lift && refMax ? refMax : null,
             order: i + 1,
             set_targets: varies
               ? ex.sets.map(st => ({ label: st.setLabel, weight: st.prescWt, reps: st.prescReps }))

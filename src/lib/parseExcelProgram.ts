@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { parseRefMaxes, type RefMaxes } from './maxes'
 
 export interface ParsedSet {
   setLabel: string
@@ -30,6 +31,8 @@ function isWarmupSection(section: string | null): boolean {
 
 export interface ParsedWeek {
   phaseTitle: string
+  /** Maxes the phase's weights were written for (e.g. Squat 290) */
+  refMaxes: RefMaxes
   localWeek: number
   absoluteWeek: number
   days: ParsedDay[]
@@ -41,10 +44,23 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
 
   const allWeeks: ParsedWeek[] = []
   let weekCounter = 0
+  let lastRefMaxes: RefMaxes = {}
 
   for (const sheetName of phaseSheets) {
     const sheet = workbook.Sheets[sheetName]
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })
+
+    // Reference maxes from the phase header (falls back to the previous phase)
+    let refMaxes: RefMaxes = {}
+    for (let r = 0; r < Math.min(rows.length, 4); r++) {
+      const cell = rows[r]?.[0]
+      if (typeof cell === 'string' && /1RM/i.test(cell)) {
+        refMaxes = parseRefMaxes(cell)
+        break
+      }
+    }
+    refMaxes = { ...lastRefMaxes, ...refMaxes }
+    lastRefMaxes = refMaxes
 
     let headerRowIdx: number | null = null
     for (let i = 0; i < rows.length; i++) {
@@ -114,7 +130,13 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
         }
       }
 
-      if (typeof first === 'number' && row[1]) {
+      // Exercise rows are numbered 1, 2, 3… or A1, A2, B1… (French contrast complexes)
+      const isExerciseStart =
+        (typeof first === 'number' || (typeof firstTrimmed === 'string' && /^[A-Z]\d{1,2}$/.test(firstTrimmed))) &&
+        !!row[1] &&
+        typeof row[4] === 'string' && row[4].trim().startsWith('Set')
+
+      if (isExerciseStart) {
         const exercise: RawExercise = {
           name: String(row[1]),
           section: currentSection,
@@ -164,6 +186,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       weekCounter++
       const week: ParsedWeek = {
         phaseTitle: sheetName,
+        refMaxes,
         localWeek: wb.week,
         absoluteWeek: weekCounter,
         days: [],

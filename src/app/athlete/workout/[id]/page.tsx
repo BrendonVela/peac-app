@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/Badge'
 import { WorkoutLogger } from './WorkoutLogger'
 import { WarmupChecklist } from './WarmupChecklist'
 
-import { buildSetTargets, formatReps, targetsAreUniform } from '@/lib/setTargets'
+import { buildSetTargets, formatReps, targetsAreUniform, maxRatio, type AthleteMaxes } from '@/lib/setTargets'
+import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
 
 export default async function WorkoutPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -24,7 +25,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
 
   const { data: workout } = await supabase
     .from('workouts')
-    .select('id, title, notes, warmup, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, section, exercises(id, title, category, coaching_cues, video_url))')
+    .select('id, title, notes, warmup, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, section, max_lift, ref_max, exercises(id, title, category, coaching_cues, video_url))')
     .eq('id', params.id)
     .single()
 
@@ -34,7 +35,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
     .sort((a, b) => a.order - b.order)
 
   // Fetch existing results + warm-up progress
-  const [{ data: results }, { data: warmupLog }] = await Promise.all([
+  const [{ data: results }, { data: warmupLog }, { data: maxRows }] = await Promise.all([
     supabase
       .from('workout_results')
       .select('*')
@@ -46,7 +47,14 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
       .eq('athlete_id', athlete.id)
       .eq('workout_id', params.id)
       .maybeSingle(),
+    supabase
+      .from('athlete_maxes')
+      .select('lift, value')
+      .eq('athlete_id', athlete.id),
   ])
+
+  const maxes: AthleteMaxes = {}
+  ;(maxRows ?? []).forEach((m: any) => { maxes[m.lift as LiftKey] = Number(m.value) })
 
   const warmup = (workout as any).warmup as { title?: string; items?: string[] } | null
   const warmupItems = Array.isArray(warmup?.items) ? warmup!.items! : []
@@ -101,7 +109,8 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
             const ex = wx.exercises
             const showSection = !!wx.section && wx.section !== exercises[i - 1]?.section
             const existing = resultMap.get(wx.id)
-            const targets = buildSetTargets(wx)
+            const targets = buildSetTargets(wx, maxes)
+            const personalized = maxRatio(wx, maxes) !== 1
             const uniform = targetsAreUniform(targets)
             return (
               <div key={wx.id} className="space-y-4">
@@ -126,6 +135,11 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                         {uniform && targets[0]?.reps && <span className="text-xs text-zinc-400">{formatReps(targets[0].reps)}</span>}
                         {uniform && targets[0]?.weight && <span className="text-xs text-zinc-400">{targets[0].weight}</span>}
                         {!uniform && <span className="text-xs text-blue-400">Targets change by set</span>}
+                        {personalized && (
+                          <span className="text-xs text-emerald-400">
+                            Set from your {LIFT_LABEL[wx.max_lift as LiftKey]} max ({maxes[wx.max_lift as LiftKey]} lb)
+                          </span>
+                        )}
                         {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
                         {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}
                       </div>

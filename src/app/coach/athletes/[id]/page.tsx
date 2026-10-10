@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { getReadinessBadge, getReadinessLabel, formatDate, TEST_META } from '@/lib/utils'
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
 import { StartDateForm } from './StartDateForm'
+import { MaxesForm } from './MaxesForm'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 import { getAthleteSchedule, formatMonthDay } from '@/lib/schedule'
 
@@ -29,7 +30,7 @@ export default async function AthleteDetailPage({
 
   if (!athlete) notFound()
 
-  const [{ data: checkIns }, { data: tests }, schedule] = await Promise.all([
+  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }] = await Promise.all([
     supabase
       .from('check_ins')
       .select('*')
@@ -42,7 +43,15 @@ export default async function AthleteDetailPage({
       .eq('athlete_id', params.id)
       .order('date', { ascending: false }),
     getAthleteSchedule(supabase, params.id),
+    supabase.from('athlete_maxes').select('lift, value, updated_at').eq('athlete_id', params.id),
   ])
+
+  const maxes: Record<string, number> = {}
+  let maxesUpdated: string | null = null
+  ;(maxRows ?? []).forEach((m: any) => {
+    maxes[m.lift] = Number(m.value)
+    if (!maxesUpdated || m.updated_at > maxesUpdated) maxesUpdated = m.updated_at
+  })
 
   const today = schedule.today
   const month = /^\d{4}-\d{2}$/.test(searchParams.month ?? '') ? searchParams.month! : today.slice(0, 7)
@@ -140,6 +149,16 @@ export default async function AthleteDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* 1-Rep Maxes */}
+      <Card>
+        <CardHeader>
+          <CardTitle>1-Rep Maxes</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <MaxesForm athleteId={params.id} initial={maxes} updatedAt={maxesUpdated} />
+        </CardContent>
+      </Card>
 
       {/* Training Calendar */}
       {schedule.assignments.length > 0 && (

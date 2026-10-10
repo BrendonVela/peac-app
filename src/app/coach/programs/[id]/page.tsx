@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { deleteProgram } from '@/app/actions/programs'
 import { AssignProgramForm } from './AssignProgramForm'
+import { ProgramTools } from './ProgramTools'
+import { EditExerciseButton } from './EditExerciseButton'
+import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
 import { ExerciseVideo } from '@/components/ExerciseVideo'
 
 // "8" -> "8 reps", but "8 reps" or "20yd" stays as-is
@@ -34,7 +37,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
   const [{ data: blocks }, { data: athletes }, { data: assignments }] = await Promise.all([
     supabase
       .from('training_blocks')
-      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, warmup, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, section, exercises(title, category, video_url)))')
+      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, warmup, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, section, max_lift, ref_max, exercises(title, category, video_url)))')
       .eq('program_id', params.id)
       .order('order'),
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id),
@@ -61,6 +64,8 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
           </button>
         </form>
       </div>
+
+      <ProgramTools programId={params.id} athletes={(athletes ?? []).map(a => ({ id: a.id, name: a.name }))} />
 
       {/* Assign Athletes */}
       <Card>
@@ -144,12 +149,20 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                         ))}
                                       </div>
                                     )}
+                                    {wx.max_lift && wx.ref_max && (
+                                      <p className="text-[11px] text-emerald-400 mt-1">
+                                        Scales with {LIFT_LABEL[wx.max_lift as LiftKey]} max (written for {Number(wx.ref_max)} lb)
+                                      </p>
+                                    )}
                                     {wx.notes && <p className="text-xs text-zinc-500 mt-1 italic">{wx.notes}</p>}
                                     <ExerciseVideo url={wx.exercises?.video_url} title={wx.exercises?.title} />
                                   </div>
-                                  {wx.exercises?.category && (
-                                    <Badge variant="default" className="shrink-0">{wx.exercises.category}</Badge>
-                                  )}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {wx.exercises?.category && (
+                                      <Badge variant="default">{wx.exercises.category}</Badge>
+                                    )}
+                                    <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} />
+                                  </div>
                                 </div>
                                 </div>
                               ))}
