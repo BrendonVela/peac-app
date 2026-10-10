@@ -34,7 +34,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
   const [{ data: blocks }, { data: athletes }, { data: assignments }] = await Promise.all([
     supabase
       .from('training_blocks')
-      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, exercises(title, category, video_url)))')
+      .select('id, title, week_number, order, workouts(id, title, day_of_week, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, exercises(title, category, video_url)))')
       .eq('program_id', params.id)
       .order('order'),
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id),
@@ -116,6 +116,15 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                       {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
                                       {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}
                                     </div>
+                                    {Array.isArray(wx.set_targets) && wx.set_targets.length > 0 && (
+                                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                        {wx.set_targets.map((t: any, k: number) => (
+                                          <span key={k} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                                            {t.label}: {[t.weight, t.reps].filter(Boolean).join(' × ')}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
                                     {wx.notes && <p className="text-xs text-zinc-500 mt-1 italic">{wx.notes}</p>}
                                     <ExerciseVideo url={wx.exercises?.video_url} title={wx.exercises?.title} />
                                   </div>

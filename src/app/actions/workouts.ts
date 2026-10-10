@@ -12,6 +12,7 @@ export async function logWorkoutResult(
     reps_completed?: number
     completed: boolean
     notes?: string
+    set_logs?: { weight: number | null; reps: number | null; done: boolean }[]
   }
 ) {
   const supabase = createClient()
@@ -31,6 +32,7 @@ export async function logWorkoutResult(
         reps_completed: data.reps_completed ?? null,
         completed: data.completed,
         notes: data.notes ?? null,
+        set_logs: data.set_logs ?? null,
         logged_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
@@ -45,6 +47,7 @@ export async function logWorkoutResult(
       reps_completed: data.reps_completed ?? null,
       completed: data.completed,
       notes: data.notes ?? null,
+      set_logs: data.set_logs ?? null,
     })
 
     if (error) return { error: error.message }

@@ -167,6 +167,10 @@ export async function importProgramFromExcel(formData: FormData) {
         .filter((ex) => nameToId.has(ex.name.trim().toLowerCase()))
         .map((ex, i) => {
           const firstSet = ex.sets[0]
+          // Keep every set's target when they differ (e.g. pyramids)
+          const varies = ex.sets.some(
+            st => st.prescWt !== firstSet?.prescWt || st.prescReps !== firstSet?.prescReps
+          )
           return {
             workout_id: workout.id,
             exercise_id: nameToId.get(ex.name.trim().toLowerCase()),
@@ -177,6 +181,9 @@ export async function importProgramFromExcel(formData: FormData) {
             rest: null,
             notes: ex.coachingNote,
             order: i + 1,
+            set_targets: varies
+              ? ex.sets.map(st => ({ label: st.setLabel, weight: st.prescWt, reps: st.prescReps }))
+              : null,
           }
         })
 

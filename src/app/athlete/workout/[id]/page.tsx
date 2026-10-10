@@ -6,11 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { WorkoutLogger } from './WorkoutLogger'
 
-// "8" -> "8 reps", but "8 reps" or "20yd" stays as-is
-function formatReps(reps: string): string {
-  const r = String(reps).trim()
-  return /^\d+$/.test(r) ? `${r} reps` : r
-}
+import { buildSetTargets, formatReps, targetsAreUniform } from '@/lib/setTargets'
 
 export default async function WorkoutPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -27,7 +23,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
 
   const { data: workout } = await supabase
     .from('workouts')
-    .select('id, title, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, exercises(id, title, category, coaching_cues, video_url))')
+    .select('id, title, notes, workout_exercises(id, sets, reps, load, tempo, rest, notes, order, set_targets, exercises(id, title, category, coaching_cues, video_url))')
     .eq('id', params.id)
     .single()
 
@@ -82,6 +78,8 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
           {exercises.map((wx: any, i: number) => {
             const ex = wx.exercises
             const existing = resultMap.get(wx.id)
+            const targets = buildSetTargets(wx)
+            const uniform = targetsAreUniform(targets)
             return (
               <Card key={wx.id}>
                 <CardHeader>
@@ -92,9 +90,10 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                         <CardTitle>{ex?.title}</CardTitle>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {wx.sets && <span className="text-xs text-zinc-400">{wx.sets} sets</span>}
-                        {wx.reps && <span className="text-xs text-zinc-400">{formatReps(wx.reps)}</span>}
-                        {wx.load && <span className="text-xs text-zinc-400">{wx.load}</span>}
+                        <span className="text-xs text-zinc-400">{targets.length} {targets.length === 1 ? 'set' : 'sets'}</span>
+                        {uniform && targets[0]?.reps && <span className="text-xs text-zinc-400">{formatReps(targets[0].reps)}</span>}
+                        {uniform && targets[0]?.weight && <span className="text-xs text-zinc-400">{targets[0].weight}</span>}
+                        {!uniform && <span className="text-xs text-blue-400">Targets change by set</span>}
                         {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
                         {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}
                       </div>
@@ -110,6 +109,8 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                     workoutExerciseId={wx.id}
                     workoutId={params.id}
                     athleteId={athlete.id}
+                    targets={targets}
+                    initialSetLogs={existing?.set_logs ?? null}
                     initialWeight={existing?.weight_used ?? undefined}
                     initialReps={existing?.reps_completed ?? undefined}
                     initialCompleted={existing?.completed ?? false}
