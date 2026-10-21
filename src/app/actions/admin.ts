@@ -3,6 +3,7 @@
 import { randomInt } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function code(len = 8) {
@@ -61,6 +62,20 @@ export async function setCoachSignupCode(value: string | null) {
 
 export async function generateCoachSignupCode() {
   return setCoachSignupCode('PEAC-' + code(6))
+}
+
+// ---------- Set someone's password (admin only) ----------
+export async function adminSetPassword(userId: string, password: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin !== true) return { error: 'Only the admin can set passwords.' }
+  if (password.length < 6) return { error: 'Password must be at least 6 characters.' }
+  const admin = createAdminClient()
+  if (!admin) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
+  const { error } = await admin.auth.admin.updateUserById(userId, { password })
+  return fail(error) ?? { ok: true }
 }
 
 // ---------- People ----------

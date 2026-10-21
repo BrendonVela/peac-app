@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ShieldCheck, Trash2, KeyRound, Copy, Check, UserPlus, RotateCcw, Search, ChevronRight, Eye,
+  ShieldCheck, Trash2, KeyRound, Copy, Check, UserPlus, RotateCcw, Search, ChevronRight, Eye, Lock,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -14,7 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import {
   createCoachInvite, deleteCoachInvite, setAdmin, moveAthlete,
-  setCoachSignupCode, generateCoachSignupCode,
+  setCoachSignupCode, generateCoachSignupCode, adminSetPassword,
   deleteAthlete, deleteCoach, resetAthleteData,
 } from '@/app/actions/admin'
 import { startViewAs } from '@/app/actions/viewAs'
@@ -54,6 +54,7 @@ type Dialog =
   | { type: 'deleteAthlete'; p: Person }
   | { type: 'deleteCoach'; p: Person }
   | { type: 'reset'; p: Person }
+  | { type: 'password'; p: Person }
   | null
 
 export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: Person[]; invites: CoachInvite[]; myCoachId: string | null; coachCode: string | null }) {
@@ -72,6 +73,8 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
   const [note, setNote] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
   const [codeDraft, setCodeDraft] = useState(coachCode ?? '')
+  const [newPw, setNewPw] = useState('')
+  const [showPw, setShowPw] = useState(false)
 
   const filteredAthletes = useMemo(() => {
     const q = search.toLowerCase()
@@ -326,6 +329,11 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
                     >
                       {c.is_admin ? 'Remove admin' : 'Make admin'}
                     </button>
+                    {c.user_id && (
+                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: c }) }} className="text-zinc-500 hover:text-white p-1.5" title="Set password">
+                        <Lock className="w-4 h-4" />
+                      </button>
+                    )}
                     {c.email && (
                       <button onClick={() => sendReset(c)} className="text-zinc-500 hover:text-white p-1.5" title="Send password reset">
                         <KeyRound className="w-4 h-4" />
@@ -393,6 +401,11 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
                     <button onClick={() => openDialog({ type: 'reset', p: a })} className="text-zinc-500 hover:text-amber-400 p-1.5" title="Reset training data">
                       <RotateCcw className="w-4 h-4" />
                     </button>
+                    {a.user_id && (
+                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: a }) }} className="text-zinc-500 hover:text-white p-1.5" title="Set password">
+                        <Lock className="w-4 h-4" />
+                      </button>
+                    )}
                     {a.email && (
                       <button onClick={() => sendReset(a)} className="text-zinc-500 hover:text-white p-1.5" title="Send password reset">
                         <KeyRound className="w-4 h-4" />
@@ -462,6 +475,43 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
                 onClick={async () => { if (await run('dialog', () => deleteCoach(dialog.p.id, transferTo || null), 'Coach deleted')) setDialog(null) }}
               >
                 Delete coach
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={dialog?.type === 'password'} onClose={() => setDialog(null)} title="Set password">
+        {dialog?.type === 'password' && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-300">
+              New password for <b>{dialog.p.name}</b>{dialog.p.email ? <> ({dialog.p.email})</> : null}. It changes right away — tell them the new password yourself.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="At least 6 characters"
+                autoComplete="new-password"
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Button variant="secondary" size="sm" type="button" onClick={() => setShowPw(v => !v)}>{showPw ? 'Hide' : 'Show'}</Button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDialog(null)}>Cancel</Button>
+              <Button
+                size="sm"
+                disabled={newPw.length < 6}
+                loading={busy === 'set-pw'}
+                onClick={async () => {
+                  const p = dialog.p
+                  if (await run('set-pw', () => adminSetPassword(p.user_id!, newPw), `Password changed for ${p.name}`)) {
+                    setDialog(null); setNewPw('')
+                  }
+                }}
+              >
+                <Lock className="w-4 h-4" /> Set password
               </Button>
             </div>
           </div>
