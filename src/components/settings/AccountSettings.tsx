@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { KeyRound, Trash2, User, Shield } from 'lucide-react'
+import { KeyRound, Trash2, User, Shield, Mail } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -24,6 +24,9 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
   const [nameValue, setNameValue] = useState(name)
   const [nameMsg, setNameMsg] = useState<{ t: string; ok: boolean } | null>(null)
   const [pwMsg, setPwMsg] = useState<{ t: string; ok: boolean } | null>(null)
+  const [currentEmail, setCurrentEmail] = useState(email)
+  const [newEmail, setNewEmail] = useState('')
+  const [emailMsg, setEmailMsg] = useState<{ t: string; ok: boolean } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [confirmText, setConfirmText] = useState('')
@@ -53,6 +56,28 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
     setPwMsg({ t: 'Password updated', ok: true })
   }
 
+  async function changeEmail(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const next = newEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) { setEmailMsg({ t: 'Enter a valid email address.', ok: false }); return }
+    if (next === currentEmail.toLowerCase()) { setEmailMsg({ t: 'That is already your email.', ok: false }); return }
+    setBusy('email'); setEmailMsg(null)
+    const { data, error } = await createClient().auth.updateUser(
+      { email: next },
+      { emailRedirectTo: `${window.location.origin}/${role}/settings` }
+    )
+    setBusy(null)
+    if (error) { setEmailMsg({ t: error.message, ok: false }); return }
+    setNewEmail('')
+    if (data.user?.email?.toLowerCase() === next) {
+      setCurrentEmail(next)
+      setEmailMsg({ t: `Email changed. Sign in with ${next} from now on.`, ok: true })
+      router.refresh()
+    } else {
+      setEmailMsg({ t: `Almost done — open the confirmation email sent to ${next} (and your old address, if asked) to finish the change.`, ok: true })
+    }
+  }
+
   async function doDelete() {
     setBusy('delete'); setDeleteError('')
     const res = await deleteMyAccount()
@@ -65,7 +90,7 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-zinc-400 text-sm mt-0.5">Signed in as {email}</p>
+        <p className="text-zinc-400 text-sm mt-0.5">Signed in as {currentEmail}</p>
       </div>
 
       {viewingAs && (
@@ -82,6 +107,28 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
             <Button size="sm" onClick={saveName} loading={busy === 'name'} disabled={nameValue.trim() === name.trim()}>Save name</Button>
             {nameMsg && <span className={`text-xs ${nameMsg.ok ? 'text-green-400' : 'text-red-400'}`}>{nameMsg.t}</span>}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Mail className="w-4 h-4 text-blue-400" /> Change email</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          <form onSubmit={changeEmail} className="space-y-3">
+            <p className="text-sm text-zinc-400">Current: <span className="text-white">{currentEmail}</span></p>
+            <Input
+              label="New email"
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="sm" type="submit" loading={busy === 'email'} disabled={!newEmail.trim()}>Update email</Button>
+              {emailMsg && <span className={`text-xs ${emailMsg.ok ? 'text-green-400' : 'text-red-400'}`}>{emailMsg.t}</span>}
+            </div>
+          </form>
         </CardContent>
       </Card>
 
