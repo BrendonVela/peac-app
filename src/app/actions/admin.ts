@@ -42,6 +42,27 @@ export async function deleteCoachInvite(inviteCode: string) {
   return fail(error) ?? { ok: true }
 }
 
+// ---------- Shared coach sign-up code ----------
+export async function setCoachSignupCode(value: string | null) {
+  const supabase = createClient()
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin !== true) return { error: 'Only the admin can change the coach code.' }
+  let v: string | null = null
+  if (value !== null) {
+    v = value.trim().toUpperCase()
+    if (!/^[A-Z0-9-]{4,30}$/.test(v)) return { error: 'Use 4–30 letters, numbers or dashes (no spaces).' }
+  }
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: 'coach_signup_code', value: v, updated_at: new Date().toISOString() })
+  refresh()
+  return fail(error) ?? { ok: true, code: v }
+}
+
+export async function generateCoachSignupCode() {
+  return setCoachSignupCode('PEAC-' + code(6))
+}
+
 // ---------- People ----------
 export async function setAdmin(coachId: string, value: boolean) {
   const supabase = createClient()

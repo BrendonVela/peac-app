@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import {
   createCoachInvite, deleteCoachInvite, setAdmin, moveAthlete,
+  setCoachSignupCode, generateCoachSignupCode,
   deleteAthlete, deleteCoach, resetAthleteData,
 } from '@/app/actions/admin'
 import { startViewAs } from '@/app/actions/viewAs'
@@ -55,7 +56,7 @@ type Dialog =
   | { type: 'reset'; p: Person }
   | null
 
-export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; invites: CoachInvite[]; myCoachId: string | null }) {
+export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: Person[]; invites: CoachInvite[]; myCoachId: string | null; coachCode: string | null }) {
   const router = useRouter()
   const coaches = people.filter(p => p.kind === 'coach').sort((a, b) => a.name.localeCompare(b.name))
   const athletes = people.filter(p => p.kind === 'athlete').sort((a, b) => a.name.localeCompare(b.name))
@@ -70,6 +71,7 @@ export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; i
   const [resetTests, setResetTests] = useState(false)
   const [note, setNote] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
+  const [codeDraft, setCodeDraft] = useState(coachCode ?? '')
 
   const filteredAthletes = useMemo(() => {
     const q = search.toLowerCase()
@@ -173,6 +175,66 @@ export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; i
           </Card>
         ))}
       </div>
+
+      {/* Shared coach sign-up code */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Coach sign-up code</CardTitle>
+          <p className="text-xs text-zinc-500 mt-1">
+            Anyone with this code can sign up as a coach: on the Sign up page they choose <b>Coach</b> and enter it. It works for everyone until you change it or turn it off.
+          </p>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {coachCode ? (
+              <>
+                <span className="font-mono text-xl font-bold tracking-wider text-white">{coachCode}</span>
+                <Badge variant="green">On</Badge>
+                <button onClick={() => copy(coachCode, '__code')} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+                  {copied === '__code' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied === '__code' ? 'Copied' : 'Copy'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm text-zinc-400">No code — coaches can only join with an invite link.</span>
+                <Badge variant="default">Off</Badge>
+              </>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={codeDraft}
+              onChange={e => setCodeDraft(e.target.value.toUpperCase().replace(/\s/g, ''))}
+              placeholder="New code, e.g. PEACCOACH27"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button size="sm" loading={busy === 'code-save'} disabled={!codeDraft.trim() || codeDraft === coachCode}
+              onClick={() => run('code-save', () => setCoachSignupCode(codeDraft), 'Coach code updated')}>
+              Save code
+            </Button>
+            <Button size="sm" variant="secondary" loading={busy === 'code-gen'}
+              onClick={async () => {
+                setBusy('code-gen')
+                const res = await generateCoachSignupCode()
+                setBusy(null)
+                if ('error' in res && res.error) { flash(res.error, false); return }
+                setCodeDraft(('code' in res && res.code) || '')
+                flash('New coach code made')
+                router.refresh()
+              }}>
+              Random code
+            </Button>
+            {coachCode && (
+              <Button size="sm" variant="ghost" loading={busy === 'code-off'}
+                onClick={async () => { if (await run('code-off', () => setCoachSignupCode(null), 'Coach code turned off')) setCodeDraft('') }}>
+                Turn off
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-zinc-500">Changing the code doesn&apos;t affect coaches who already signed up.</p>
+        </CardContent>
+      </Card>
 
       {/* Coach invites */}
       <Card>

@@ -10,9 +10,10 @@ export default async function AdminPage() {
   const { data: isAdmin } = await supabase.rpc('is_admin')
   if (isAdmin !== true) redirect('/coach/dashboard')
 
-  const [{ data: people, error }, { data: invites }] = await Promise.all([
+  const [{ data: people, error }, { data: invites }, { data: codeRow }] = await Promise.all([
     supabase.rpc('admin_list_people'),
     supabase.from('coach_invites').select('*').order('created_at', { ascending: false }),
+    supabase.from('app_settings').select('value').eq('key', 'coach_signup_code').maybeSingle(),
   ])
 
   const me = ((people ?? []) as Person[]).find(p => p.kind === 'coach' && p.user_id === user.id)
@@ -30,6 +31,7 @@ export default async function AdminPage() {
           people={(people ?? []) as Person[]}
           invites={(invites ?? []) as CoachInvite[]}
           myCoachId={me?.id ?? null}
+          coachCode={codeRow?.value ?? null}
         />
       )}
     </div>
