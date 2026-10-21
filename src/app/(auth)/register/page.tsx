@@ -147,7 +147,7 @@ const [inviteCode, setInviteCode] = useState('')
           </Link>
         </p>
         <p className="text-center text-xs text-zinc-600 mt-4">
-          By creating an account you agree to our <Link href="/privacy" className="underline hover:text-zinc-400">Privacy Policy</Link>.
+          By creating an account you agree to our <Link href="/terms" className="underline hover:text-zinc-400">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-zinc-400">Privacy Policy</Link>.
         </p>
       </div>
     </div>

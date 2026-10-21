@@ -108,7 +108,7 @@ export function RestTimer() {
   const pct = total > 0 ? Math.min(100, ((total - remaining) / total) * 100) : 100
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 md:left-60 px-3 pb-3 pointer-events-none">
+    <div className="rest-timer fixed inset-x-0 bottom-0 z-40 md:left-60 px-3 pb-3 pointer-events-none">
       <div
         className={cn(
           'pointer-events-auto max-w-2xl mx-auto rounded-2xl border shadow-2xl overflow-hidden',

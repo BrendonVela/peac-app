@@ -317,8 +317,9 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <footer className="border-t border-zinc-800 pt-6 text-xs text-zinc-500">
+        <footer className="flex gap-4 border-t border-zinc-800 pt-6 text-xs text-zinc-500">
           <Link href="/login" className="hover:text-zinc-300">← Back to {APP_NAME}</Link>
+          <Link href="/terms" className="hover:text-zinc-300">Terms of Service</Link>
         </footer>
       </div>
     </div>

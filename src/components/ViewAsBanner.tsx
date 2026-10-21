@@ -4,7 +4,7 @@ import type { ViewAs } from '@/lib/acting'
 
 export function ViewAsBanner({ viewAs }: { viewAs: ViewAs }) {
   return (
-    <div className="sticky top-14 md:top-0 z-30 bg-amber-500 text-black">
+    <div className="view-as-banner sticky md:top-0 z-30 bg-amber-500 text-black">
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-2 flex items-center gap-3 text-sm">
         <Eye className="w-4 h-4 shrink-0" />
         <p className="flex-1 min-w-0 truncate">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Send } from 'lucide-react'
+import { Send, ChevronLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -111,9 +111,9 @@ export default function CoachMessagesPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Messages</h1>
 
-      <div className="grid md:grid-cols-3 gap-4 h-[600px]">
+      <div className="grid md:grid-cols-3 gap-4 h-[calc(100dvh-17rem)] min-h-[360px] md:h-[600px]">
         {/* Thread list */}
-        <Card className="overflow-hidden flex flex-col">
+        <Card className={cn('overflow-hidden flex-col h-full', selected ? 'hidden md:flex' : 'flex')}>
           <CardHeader className="shrink-0">
             <p className="text-sm font-semibold">Athletes</p>
           </CardHeader>
@@ -154,10 +154,13 @@ export default function CoachMessagesPage() {
         </Card>
 
         {/* Message thread */}
-        <Card className="md:col-span-2 flex flex-col overflow-hidden">
+        <Card className={cn('md:col-span-2 flex-col overflow-hidden h-full', selected ? 'flex' : 'hidden md:flex')}>
           {selected ? (
             <>
               <CardHeader className="shrink-0 flex flex-row items-center gap-3">
+                <button type="button" onClick={() => setSelected(null)} className="md:hidden -ml-2 p-1 text-zinc-400 hover:text-white" aria-label="Back to athletes">
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
                 <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-400 text-xs font-semibold">
                   {selected.athlete.name.slice(0, 2).toUpperCase()}
                 </div>
@@ -174,7 +177,7 @@ export default function CoachMessagesPage() {
                     <div key={msg.id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
                       <div
                         className={cn(
-                          'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm',
+                          'max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm',
                           isMe
                             ? 'bg-blue-600 text-white rounded-br-sm'
                             : 'bg-zinc-800 text-white rounded-bl-sm'

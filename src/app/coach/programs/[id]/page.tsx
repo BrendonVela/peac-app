@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { coachMatch } from '@/lib/acting'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Trash2, ChevronDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { deleteProgram } from '@/app/actions/programs'
@@ -85,19 +85,22 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
       {/* Training Blocks */}
       {blocks && blocks.length > 0 ? (
         <div className="space-y-4">
-          {blocks.map(block => {
+          {blocks.length > 1 && (
+            <p className="text-xs text-zinc-500">Tap a week to open or close it.</p>
+          )}
+          {blocks.map((block, bIdx) => {
             const workouts = ((block.workouts as any[]) ?? []).sort(
               (a: any, b: any) => (a.day_of_week ?? 0) - (b.day_of_week ?? 0)
             )
             return (
-              <Card key={block.id}>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="blue">Week {block.week_number}</Badge>
-                    <CardTitle>{block.title}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-0">
+              <details key={block.id} open={bIdx === 0} className="group rounded-2xl border border-zinc-800 bg-zinc-900">
+                <summary className="flex cursor-pointer select-none list-none items-center gap-3 px-4 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+                  <Badge variant="blue">Week {block.week_number}</Badge>
+                  <span className="flex-1 min-w-0 truncate font-semibold text-white">{block.title}</span>
+                  <span className="hidden sm:inline text-xs text-zinc-500">{workouts.length} {workouts.length === 1 ? 'day' : 'days'}</span>
+                  <ChevronDown className="w-4 h-4 shrink-0 text-zinc-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
                   {workouts.length > 0 ? (
                     workouts.map((workout: any, wIdx: number) => {
                       const wxs = (workout.workout_exercises ?? []).sort((a: any, b: any) => a.order - b.order)
@@ -130,7 +133,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                     {String(wx.section).replace(/^★\s*/, '')}
                                   </div>
                                 )}
-                                <div className="flex items-start gap-4 px-4 py-3">
+                                <div className="flex items-start gap-3 sm:gap-4 px-3 sm:px-4 py-3">
                                   <span className="text-xs text-zinc-600 font-mono w-5 shrink-0 mt-0.5">{i + 1}.</span>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-white">{wx.exercises?.title}</p>
@@ -160,7 +163,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
                                     {wx.exercises?.category && (
-                                      <Badge variant="default">{wx.exercises.category}</Badge>
+                                      <span className="hidden sm:inline"><Badge variant="default">{wx.exercises.category}</Badge></span>
                                     )}
                                     <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} />
                                   </div>
@@ -177,8 +180,8 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                   ) : (
                     <p className="text-sm text-zinc-500">No workouts in this block.</p>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </details>
             )
           })}
         </div>

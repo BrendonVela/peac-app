@@ -1,0 +1,17 @@
+{
+  "appId": "com.peac.app",
+  "appName": "PEAC",
+  "webDir": "mobile/www",
+  "server": {
+    "url": "https://peac-app.vercel.app",
+    "cleartext": false
+  },
+  "backgroundColor": "#09090b",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#09090b"
+  },
+  "android": {
+    "backgroundColor": "#09090b"
+  }
+}

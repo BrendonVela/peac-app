@@ -107,6 +107,8 @@ export default function LoginPage() {
           </Link>
         </p>
         <p className="text-center text-xs text-zinc-600 mt-4">
+          <Link href="/terms" className="hover:text-zinc-400">Terms</Link>
+          <span className="mx-2">·</span>
           <Link href="/privacy" className="hover:text-zinc-400">Privacy Policy</Link>
         </p>
       </div>

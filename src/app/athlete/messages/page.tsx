@@ -76,7 +76,7 @@ export default function AthleteMessagesPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Messages</h1>
 
-      <Card className="h-[600px] flex flex-col">
+      <Card className="h-[calc(100dvh-17rem)] min-h-[360px] md:h-[600px] flex flex-col">
         {coachUserId ? (
           <>
             <CardHeader className="shrink-0 flex flex-row items-center gap-3">

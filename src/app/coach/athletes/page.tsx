@@ -113,7 +113,7 @@ async function handleUnclaim(athleteId: string) {
 }
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Athletes</h1>
           <p className="text-zinc-400 text-sm mt-0.5">{athletes.length} total</p>

@@ -27,7 +27,7 @@ export default async function ProgramsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Programs</h1>
           <p className="text-zinc-400 text-sm mt-0.5">{programs?.length ?? 0} total</p>
@@ -40,14 +40,14 @@ export default async function ProgramsPage() {
         </Link>
       </div>
       
-      <form action={importProgramFromExcel} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
+      <form action={importProgramFromExcel} className="flex flex-wrap items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
         <Upload className="w-4 h-4 text-zinc-400 shrink-0" />
         <input
           type="file"
           name="file"
           accept=".xlsx,.xls"
           required
-          className="flex-1 text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:text-sm file:font-medium file:cursor-pointer hover:file:bg-blue-700"
+          className="flex-1 min-w-0 text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:text-sm file:font-medium file:cursor-pointer hover:file:bg-blue-700"
         />
         <Button type="submit" size="sm" variant="secondary">
           Import

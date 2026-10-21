@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase/client'
 import { deleteMyAccount, updateMyName } from '@/app/actions/account'
+import { NotificationSettings } from './NotificationSettings'
 
 interface Props {
   email: string
@@ -100,10 +101,13 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
         </CardContent>
       </Card>
 
+      {!viewingAs && <NotificationSettings role={role} />}
+
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Shield className="w-4 h-4 text-blue-400" /> Privacy</CardTitle></CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="pt-0 flex flex-col gap-2">
           <Link href="/privacy" className="text-sm text-blue-400 hover:text-blue-300">Read the PEAC Privacy Policy</Link>
+          <Link href="/terms" className="text-sm text-blue-400 hover:text-blue-300">Read the PEAC Terms of Service</Link>
         </CardContent>
       </Card>
 

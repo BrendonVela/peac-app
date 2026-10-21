@@ -33,6 +33,46 @@
   }
 }
 
+/* ---------- Phone / installed-app layout ---------- */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Top bar sits below the iPhone notch / status bar */
+.mobile-header {
+  height: calc(3.5rem + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+/* Bottom tab bar sits above the iPhone home indicator */
+.tabbar {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar-offset {
+  bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 767px) {
+  /* Leave room for the top bar and bottom tab bar */
+  .mobile-main {
+    padding-top: calc(3.5rem + env(safe-area-inset-top) + 1.5rem) !important;
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom) + 2rem) !important;
+  }
+  .view-as-banner {
+    top: calc(3.5rem + env(safe-area-inset-top));
+  }
+  /* Rest timer floats above the tab bar */
+  .rest-timer {
+    bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+  /* iPhone zooms in on text boxes smaller than 16px — stop that */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
