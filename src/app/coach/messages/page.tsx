@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Send, ChevronLeft, ShieldCheck, Megaphone } from 'lucide-react'
+import { Send, ChevronLeft, ShieldCheck, Megaphone, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { sendMessage, markMessagesRead, broadcastMessage, type BroadcastAudience } from '@/app/actions/messages'
+import { sendMessage, markMessagesRead, broadcastMessage, adminDeleteMessage, adminDeleteConversation, type BroadcastAudience } from '@/app/actions/messages'
 import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types'
@@ -45,6 +45,11 @@ export default function CoachMessagesPage() {
   const [broadcastBusy, setBroadcastBusy] = useState(false)
   const [broadcastMsg, setBroadcastMsg] = useState<{ t: string; ok: boolean } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null)
+  const [confirmConvo, setConfirmConvo] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [threadKey, setThreadKey] = useState(0)
+  const [threadError, setThreadError] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -121,7 +126,36 @@ export default function CoachMessagesPage() {
 
     markMessagesRead(selected.userId)
     setThreads(prev => prev.map(t => (t.userId === selected.userId ? { ...t, unread: 0 } : t)))
-  }, [selected, myUserId])
+  }, [selected, myUserId, threadKey])
+
+  async function deleteOne(id: string) {
+    setDeleting(true); setThreadError('')
+    const res = await adminDeleteMessage(id)
+    setDeleting(false)
+    if ('error' in res && res.error) { alertLike(res.error); return }
+    setActiveMsgId(null)
+    setMessages(prev => {
+      const next = prev.filter(m => m.id !== id)
+      const last = next[next.length - 1]
+      setThreads(ts => ts.map(t => (t.userId === selected?.userId ? { ...t, lastMessage: last?.content ?? '', lastAt: last?.created_at ?? '' } : t)))
+      return next
+    })
+  }
+
+  async function deleteConversation() {
+    if (!selected) return
+    setDeleting(true)
+    const res = await adminDeleteConversation(selected.userId)
+    setDeleting(false)
+    if ('error' in res && res.error) { alertLike(res.error); return }
+    setConfirmConvo(false)
+    setMessages([])
+    setThreads(ts => ts.map(t => (t.userId === selected.userId ? { ...t, lastMessage: '', lastAt: '', unread: 0 } : t)))
+  }
+
+  function alertLike(msg: string) {
+    setThreadError(msg)
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -146,6 +180,7 @@ export default function CoachMessagesPage() {
       },
     ])
     setThreads(prev => prev.map(t => (t.userId === selected.userId ? { ...t, lastMessage: content, lastAt: now } : t)))
+    if (isAdmin) setThreadKey(k => k + 1)
     setText('')
     setSending(false)
   }
@@ -246,11 +281,26 @@ export default function CoachMessagesPage() {
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <Avatar thread={selected} />
-                <div>
-                  <p className="text-sm font-semibold">{selected.name}</p>
-                  {selected.subtitle && <p className="text-xs text-zinc-500">{selected.subtitle}</p>}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{selected.name}</p>
+                  {selected.subtitle && <p className="text-xs text-zinc-500 truncate">{selected.subtitle}</p>}
                 </div>
+                {isAdmin && messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmConvo(true)}
+                    className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </CardHeader>
+              {isAdmin && messages.length > 0 && (
+                <p className="px-5 pt-2 text-[11px] text-zinc-600 shrink-0">Tap a message to delete it.</p>
+              )}
+              {threadError && <p className="px-5 pt-2 text-xs text-red-400 shrink-0">{threadError}</p>}
 
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {messages.length === 0 && (
@@ -261,11 +311,14 @@ export default function CoachMessagesPage() {
                 {messages.map(msg => {
                   const isMe = msg.sender_id === myUserId
                   return (
-                    <div key={msg.id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
+                    <div key={msg.id} className={cn('flex flex-col', isMe ? 'items-end' : 'items-start')}>
                       <div
+                        onClick={isAdmin ? () => setActiveMsgId(id => (id === msg.id ? null : msg.id)) : undefined}
                         className={cn(
                           'max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm',
-                          isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-zinc-800 text-white rounded-bl-sm'
+                          isMe ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-zinc-800 text-white rounded-bl-sm',
+                          isAdmin && 'cursor-pointer',
+                          activeMsgId === msg.id && 'ring-2 ring-red-500/60'
                         )}
                       >
                         <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -273,6 +326,16 @@ export default function CoachMessagesPage() {
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
+                      {isAdmin && activeMsgId === msg.id && (
+                        <button
+                          type="button"
+                          onClick={() => deleteOne(msg.id)}
+                          disabled={deleting}
+                          className="mt-1 flex items-center gap-1 rounded-md bg-red-600/90 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> {deleting ? 'Deleting…' : 'Delete message'}
+                        </button>
+                      )}
                     </div>
                   )
                 })}
@@ -300,6 +363,20 @@ export default function CoachMessagesPage() {
           )}
         </Card>
       </div>
+
+      <Modal open={confirmConvo} onClose={() => setConfirmConvo(false)} title="Delete conversation?">
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-300">
+            This permanently deletes all {messages.length} messages between you and <b>{selected?.name}</b>, for both of you. This can&apos;t be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConfirmConvo(false)}>Cancel</Button>
+            <Button variant="danger" size="sm" onClick={deleteConversation} loading={deleting}>
+              <Trash2 className="w-4 h-4" /> Delete conversation
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={showBroadcast} onClose={() => setShowBroadcast(false)} title="Send announcement">
         <div className="space-y-4">

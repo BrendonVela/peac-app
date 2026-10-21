@@ -105,3 +105,39 @@ export async function broadcastMessage(audience: BroadcastAudience, content: str
   revalidatePath('/coach/messages')
   return { ok: true, count: recipients.length }
 }
+
+async function requireAdmin() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' as const }
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin !== true) return { error: 'Only the admin can delete messages.' as const }
+  const admin = createAdminClient()
+  if (!admin) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' as const }
+  return { user, admin }
+}
+
+/** Admin only: delete one message */
+export async function adminDeleteMessage(messageId: string) {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return { error: ctx.error }
+  const { error } = await ctx.admin.from('messages').delete().eq('id', messageId)
+  if (error) return { error: error.message }
+  revalidatePath('/coach/messages')
+  return { ok: true }
+}
+
+/** Admin only: delete every message between two people (defaults to the admin and `otherUserId`) */
+export async function adminDeleteConversation(otherUserId: string, firstUserId?: string) {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return { error: ctx.error }
+  const a = firstUserId ?? ctx.user.id
+  const b = otherUserId
+  const { error } = await ctx.admin
+    .from('messages')
+    .delete()
+    .or(`and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`)
+  if (error) return { error: error.message }
+  revalidatePath('/coach/messages')
+  return { ok: true }
+}
