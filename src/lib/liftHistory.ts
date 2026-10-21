@@ -33,7 +33,7 @@ export async function getLiftHistory(supabase: any, athleteId: string): Promise<
   const [{ data: results }, { data: maxRows }] = await Promise.all([
     supabase
       .from('workout_results')
-      .select('set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
+      .select('workout_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
       .eq('athlete_id', athleteId)
       .order('logged_at', { ascending: true })
       .limit(2000),
@@ -43,8 +43,8 @@ export async function getLiftHistory(supabase: any, athleteId: string): Promise<
   const saved = new Map<string, number>()
   ;(maxRows ?? []).forEach((m: any) => saved.set(m.lift, Number(m.value)))
 
-  // lift -> date -> best point that day
-  const byLift = new Map<LiftKey, Map<string, LiftPoint>>()
+  // lift -> workout -> best point in that workout
+  const byLift = new Map<LiftKey, Map<string, LiftPoint & { at: string }>>()
 
   for (const r of (results ?? []) as any[]) {
     const wx = r.workout_exercises
@@ -63,19 +63,22 @@ export async function getLiftHistory(supabase: any, athleteId: string): Promise<
     if (sets.length === 0) continue
 
     const date = toLocalISO(r.logged_at)
-    const dayMap = byLift.get(lift) ?? new Map<string, LiftPoint>()
+    const key = String(r.workout_id ?? date)
+    const workoutMap = byLift.get(lift) ?? new Map<string, LiftPoint & { at: string }>()
     for (const s of sets) {
       const e = estimateMax(s.weight, s.reps)
-      const prev = dayMap.get(date)
+      const prev = workoutMap.get(key)
       if (!prev || e > prev.e1rm || (e === prev.e1rm && s.weight > prev.weight)) {
-        dayMap.set(date, { date, e1rm: e, weight: s.weight, reps: s.reps })
+        workoutMap.set(key, { date, at: r.logged_at, e1rm: e, weight: s.weight, reps: s.reps })
       }
     }
-    byLift.set(lift, dayMap)
+    byLift.set(lift, workoutMap)
   }
 
   return LIFTS.map(({ key, label }) => {
-    const points = Array.from(byLift.get(key)?.values() ?? []).sort((a, b) => a.date.localeCompare(b.date))
+    const points: LiftPoint[] = Array.from(byLift.get(key)?.values() ?? [])
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map(({ at, ...p }) => p)
     const best = points.reduce<LiftPoint | null>((m, p) => (!m || p.e1rm > m.e1rm ? p : m), null)
     const heaviest = points.reduce<LiftPoint | null>((m, p) => (!m || p.weight > m.weight ? p : m), null)
     const latest = points[points.length - 1] ?? null
