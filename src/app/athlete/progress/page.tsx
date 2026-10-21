@@ -6,6 +6,8 @@ import { TEST_META, ALL_TEST_TYPES, formatDate } from '@/lib/utils'
 import type { PerformanceTest, CheckIn, TestType } from '@/types'
 import { PerformanceChart } from './PerformanceChart'
 import { ReadinessChart } from './ReadinessChart'
+import { LiftProgress } from '@/components/LiftProgress'
+import { getLiftHistory } from '@/lib/liftHistory'
 
 export default async function ProgressPage() {
   const supabase = createClient()
@@ -20,7 +22,7 @@ export default async function ProgressPage() {
 
   if (!athlete) redirect('/login')
 
-  const [{ data: tests }, { data: checkIns }, { data: results }] = await Promise.all([
+  const [{ data: tests }, { data: checkIns }, { data: results }, lifts] = await Promise.all([
     supabase
       .from('performance_tests')
       .select('*')
@@ -38,6 +40,7 @@ export default async function ProgressPage() {
       .eq('athlete_id', athlete.id)
       .order('logged_at', { ascending: false })
       .limit(30),
+    getLiftHistory(supabase, athlete.id),
   ])
 
   // Group tests by type
@@ -78,6 +81,12 @@ export default async function ProgressPage() {
             <p className="text-3xl font-bold text-white mt-1">{checkIns?.length ?? 0}</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Main lifts */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wide">Main Lifts</h2>
+        <LiftProgress lifts={lifts} emptyText="Log your Back Squat, Trap Bar DL, DB Bench or Pendlay Row sets to see your progress here." />
       </div>
 
       {/* Readiness chart */}

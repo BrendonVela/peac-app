@@ -8,6 +8,8 @@ import { getReadinessBadge, getReadinessLabel, formatDate, TEST_META } from '@/l
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
 import { StartDateForm } from './StartDateForm'
 import { MaxesForm } from './MaxesForm'
+import { LiftProgress } from '@/components/LiftProgress'
+import { getLiftHistory } from '@/lib/liftHistory'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 import { getAthleteSchedule, formatMonthDay } from '@/lib/schedule'
 
@@ -30,7 +32,7 @@ export default async function AthleteDetailPage({
 
   if (!athlete) notFound()
 
-  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }] = await Promise.all([
+  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts] = await Promise.all([
     supabase
       .from('check_ins')
       .select('*')
@@ -44,6 +46,7 @@ export default async function AthleteDetailPage({
       .order('date', { ascending: false }),
     getAthleteSchedule(supabase, params.id),
     supabase.from('athlete_maxes').select('lift, value, updated_at').eq('athlete_id', params.id),
+    getLiftHistory(supabase, params.id),
   ])
 
   const maxes: Record<string, number> = {}
@@ -159,6 +162,12 @@ export default async function AthleteDetailPage({
           <MaxesForm athleteId={params.id} initial={maxes} updatedAt={maxesUpdated} />
         </CardContent>
       </Card>
+
+      {/* Main lift progress */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wide">Main Lift Progress</h2>
+        <LiftProgress lifts={lifts} emptyText="No main-lift sets logged yet." />
+      </div>
 
       {/* Training Calendar */}
       {schedule.assignments.length > 0 && (
