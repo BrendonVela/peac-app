@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, BookOpen, Dumbbell,
-  MessageCircle, LogOut, Menu, X, Zap,
+  MessageCircle, LogOut, Menu, X, Zap, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/app/actions/auth'
@@ -18,8 +18,9 @@ const nav = [
   { href: '/coach/messages',  icon: MessageCircle,    label: 'Messages'  },
 ]
 
-export function CoachNav() {
+export function CoachNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname()
+  const items = isAdmin ? [...nav, { href: '/coach/admin', icon: ShieldCheck, label: 'Admin' }] : nav
   const [open, setOpen] = useState(false)
 
   return (
@@ -32,7 +33,7 @@ export function CoachNav() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {nav.map(({ href, icon: Icon, label }) => {
+          {items.map(({ href, icon: Icon, label }) => {
             const active = pathname.startsWith(href)
             return (
               <Link
@@ -79,7 +80,7 @@ export function CoachNav() {
       {/* Mobile drawer */}
       {open && (
         <div className="md:hidden fixed inset-0 top-14 bg-zinc-950 z-30 px-3 py-3 space-y-0.5">
-          {nav.map(({ href, icon: Icon, label }) => {
+          {items.map(({ href, icon: Icon, label }) => {
             const active = pathname.startsWith(href)
             return (
               <Link

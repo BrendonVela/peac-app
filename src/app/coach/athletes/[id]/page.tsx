@@ -8,6 +8,7 @@ import { getReadinessBadge, getReadinessLabel, formatDate, TEST_META } from '@/l
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
 import { StartDateForm } from './StartDateForm'
 import { MaxesForm } from './MaxesForm'
+import { ManageAthlete } from './ManageAthlete'
 import { LiftProgress } from '@/components/LiftProgress'
 import { getLiftHistory } from '@/lib/liftHistory'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
@@ -32,7 +33,7 @@ export default async function AthleteDetailPage({
 
   if (!athlete) notFound()
 
-  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts] = await Promise.all([
+  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts, { data: isAdmin }] = await Promise.all([
     supabase
       .from('check_ins')
       .select('*')
@@ -47,6 +48,7 @@ export default async function AthleteDetailPage({
     getAthleteSchedule(supabase, params.id),
     supabase.from('athlete_maxes').select('lift, value, updated_at').eq('athlete_id', params.id),
     getLiftHistory(supabase, params.id),
+    supabase.rpc('is_admin'),
   ])
 
   const maxes: Record<string, number> = {}
@@ -248,6 +250,7 @@ export default async function AthleteDetailPage({
           )}
         </CardContent>
       </Card>
+      <ManageAthlete athleteId={params.id} name={athlete.name} isAdmin={isAdmin === true} />
     </div>
   )
 }

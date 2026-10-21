@@ -9,9 +9,11 @@ export default async function CoachLayout({ children }: { children: React.ReactN
   if (!user) redirect('/login')
   if (user.user_metadata?.role !== 'coach') redirect('/athlete/dashboard')
 
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+
   return (
     <div className="min-h-screen bg-zinc-950">
-      <CoachNav />
+      <CoachNav isAdmin={isAdmin === true} />
       <main className="md:ml-60 min-h-screen">
         <div className="pt-14 md:pt-0 px-4 md:px-8 py-6 md:py-8 max-w-6xl mx-auto">
           {children}

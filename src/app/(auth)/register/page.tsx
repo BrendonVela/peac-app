@@ -47,9 +47,11 @@ const [inviteCode, setInviteCode] = useState('')
     }
 
    if (role === 'coach') {
-  const { error: claimError } = await supabase.rpc('claim_coach_role', {
-    invite_code: inviteCode,
-  })
+  // New one-time coach invites first, then the older shared code
+  const { data: claimedInvite } = await supabase.rpc('claim_coach_invite', { code: inviteCode })
+  const { error: claimError } = claimedInvite
+    ? { error: null }
+    : await supabase.rpc('claim_coach_role', { invite_code: inviteCode })
   if (claimError) {
     setError('Invalid coach invite code.')
     setLoading(false)

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
-import { ArrowLeft, Check, ClipboardList, MessageSquare, ArrowUp, ArrowDown, Flame } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Flame } from 'lucide-react'
+import { SetLogEditor } from './SetLogEditor'
+import { ClearWorkoutButton } from './ClearWorkoutButton'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -9,11 +11,6 @@ import { buildSetTargets, type AthleteMaxes } from '@/lib/setTargets'
 import { toLocalISO, formatShortDate } from '@/lib/schedule'
 import type { LiftKey } from '@/lib/maxes'
 
-function firstNumber(text: string | null | undefined): number | null {
-  if (!text) return null
-  const m = String(text).match(/\d+(\.\d+)?/)
-  return m ? Number(m[0]) : null
-}
 
 export default async function CoachWorkoutView({ params }: { params: { id: string; workoutId: string } }) {
   const supabase = createClient()
@@ -68,6 +65,10 @@ export default async function CoachWorkoutView({ params }: { params: { id: strin
         </div>
       </div>
 
+      <div className="flex justify-end">
+        <ClearWorkoutButton athleteId={params.id} workoutId={params.workoutId} />
+      </div>
+
       {warmupItems.length > 0 && (
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           <Flame className="w-4 h-4 text-orange-400" />
@@ -106,51 +107,22 @@ export default async function CoachWorkoutView({ params }: { params: { id: strin
                     : <Badge className="shrink-0">Not logged</Badge>}
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="rounded-lg border border-zinc-800 overflow-hidden">
-                    <div className="grid grid-cols-[56px_1fr_1fr_32px] gap-2 px-3 py-1.5 bg-zinc-800/40 text-[10px] uppercase font-medium text-zinc-500">
-                      <span>Set</span><span>Target</span><span>Actual</span><span />
-                    </div>
-                    <div className="divide-y divide-zinc-800">
-                      {targets.map((t, k) => {
-                        let log = logs[k]
-                        // Results logged before per-set tracking only have one weight/reps
-                        if (!log && k === 0 && logs.length === 0 && result && (result.weight_used != null || result.reps_completed != null)) {
-                          log = { weight: result.weight_used, reps: result.reps_completed, done: result.completed }
-                        }
-                        const tW = firstNumber(t.weight)
-                        const tR = firstNumber(t.reps)
-                        const aW = log?.weight != null ? Number(log.weight) : null
-                        const aR = log?.reps != null ? Number(log.reps) : null
-                        const hasActual = aW != null || aR != null
-                        const diffW = tW != null && aW != null ? aW - tW : 0
-                        const diffR = tR != null && aR != null ? aR - tR : 0
-                        const above = diffW > 0 || (diffW === 0 && diffR > 0)
-                        const below = diffW < 0 || (diffW === 0 && diffR < 0)
-                        return (
-                          <div key={k} className={cn('grid grid-cols-[56px_1fr_1fr_32px] gap-2 items-center px-3 py-2 text-sm', log?.done && 'bg-green-500/[0.04]')}>
-                            <span className="text-xs text-zinc-400">{t.label}</span>
-                            <span className="text-zinc-400 truncate">{[t.weight, t.reps].filter(Boolean).join(' × ') || '—'}</span>
-                            <span className={cn('flex items-center gap-1', above ? 'text-green-400' : below ? 'text-amber-400' : 'text-white')}>
-                              {hasActual
-                                ? <>{aW != null ? `${aW} lb` : '—'} × {aR != null ? aR : '—'}</>
-                                : <span className="text-zinc-600">{log?.done ? 'As prescribed' : '—'}</span>}
-                              {hasActual && above && <ArrowUp className="w-3 h-3" />}
-                              {hasActual && below && <ArrowDown className="w-3 h-3" />}
-                            </span>
-                            <span className="flex justify-center">
-                              {log?.done && <Check className="w-4 h-4 text-green-400" />}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  {result?.notes && (
-                    <p className="flex items-start gap-1.5 text-sm text-zinc-300 mt-3">
-                      <MessageSquare className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
-                      <span><span className="text-zinc-500">Athlete note:</span> {result.notes}</span>
-                    </p>
-                  )}
+                  <SetLogEditor
+                    athleteId={params.id}
+                    workoutId={params.workoutId}
+                    workoutExerciseId={wx.id}
+                    targets={targets}
+                    initialLogs={
+                      logs.length > 0
+                        ? logs.map((l: any) => ({ weight: l?.weight ?? null, reps: l?.reps ?? null, done: !!l?.done }))
+                        : result && (result.weight_used != null || result.reps_completed != null)
+                          ? [{ weight: result.weight_used, reps: result.reps_completed, done: !!result.completed }]
+                          : result?.completed ? targets.map(() => ({ weight: null, reps: null, done: true })) : []
+                    }
+                    initialNotes={result?.notes ?? ''}
+                    initialCompleted={!!result?.completed}
+                    hasResult={!!result}
+                  />
                 </CardContent>
               </Card>
             </div>

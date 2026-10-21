@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search, ChevronRight, Pencil, X } from 'lucide-react'
+import { Plus, Search, ChevronRight, Pencil, X, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { createAthlete, claimAthlete, updateAthlete, unclaimAthlete } from '@/app/actions/programs'
+import { deleteAthlete } from '@/app/actions/admin'
 import type { Athlete } from '@/types'
 import { InviteCard } from './InviteCard'
 
@@ -23,8 +24,10 @@ const [unclaimed, setUnclaimed] = useState<Athlete[]>([])
 const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null)
 const [editError, setEditError] = useState('')
 const [editLoading, setEditLoading] = useState(false)
+const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     const supabase = createClient()
+    supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       supabase
@@ -151,15 +154,31 @@ async function handleUnclaim(athleteId: string) {
             <p className="text-sm font-medium text-white">{athlete.name}</p>
             {athlete.sport && <p className="text-xs text-zinc-500">{athlete.sport}</p>}
           </div>
-          <Button
-            size="sm"
-            onClick={async () => {
-              await claimAthlete(athlete.id)
-              setUnclaimed(prev => prev.filter(a => a.id !== athlete.id))
-            }}
-          >
-            Claim
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={async () => {
+                await claimAthlete(athlete.id)
+                setUnclaimed(prev => prev.filter(a => a.id !== athlete.id))
+              }}
+            >
+              Claim
+            </Button>
+            {isAdmin && (
+              <button
+                title="Delete athlete"
+                className="p-1.5 text-zinc-500 hover:text-red-400"
+                onClick={async () => {
+                  if (!confirm(`Permanently delete ${athlete.name} and their login? This can't be undone.`)) return
+                  const res = await deleteAthlete(athlete.id)
+                  if (res && 'error' in res && res.error) { alert(res.error); return }
+                  setUnclaimed(prev => prev.filter(a => a.id !== athlete.id))
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </CardContent>
