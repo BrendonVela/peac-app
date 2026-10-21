@@ -26,7 +26,8 @@ export function pushIsConfigured(): boolean {
 /** Send a notification to every device these users turned notifications on for. Never throws. */
 export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<number> {
   try {
-    if (userIds.length === 0 || !configure()) return 0
+    if (userIds.length === 0) return 0
+    if (!configure()) { console.log('[push] VAPID keys missing'); return 0 }
     const admin = createAdminClient()
     if (!admin) return 0
 
@@ -34,7 +35,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload): 
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth')
       .in('user_id', userIds)
-    if (!subs || subs.length === 0) return 0
+    if (!subs || subs.length === 0) { console.log('[push] no devices for', userIds); return 0 }
 
     const body = JSON.stringify(payload)
     const dead: string[] = []

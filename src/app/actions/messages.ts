@@ -21,6 +21,7 @@ export async function sendMessage(receiverId: string, content: string, returnPat
   // Phone notification for the person receiving the message
   try {
     const admin = createAdminClient()
+    if (!admin) console.log('[push] message: no admin client (SUPABASE_SERVICE_ROLE_KEY missing)')
     if (admin) {
       const [{ data: senderCoach }, { data: senderAthlete }, { data: receiverAthlete }] = await Promise.all([
         admin.from('coaches').select('name').eq('user_id', user.id).maybeSingle(),
@@ -29,12 +30,12 @@ export async function sendMessage(receiverId: string, content: string, returnPat
       ])
       const senderName = senderCoach?.name ?? senderAthlete?.name ?? 'PEAC'
       const text = content.trim()
-      await sendPushToUsers([receiverId], {
+      const sent = await sendPushToUsers([receiverId], {
         title: senderCoach ? `Coach ${senderName}` : senderName,
         body: text.length > 140 ? text.slice(0, 137) + '…' : text,
         url: receiverAthlete ? '/athlete/messages' : '/coach/messages',
-        tag: `msg-${user.id}`,
       })
+      console.log('[push] message', { from: user.id, to: receiverId, sent })
     }
   } catch (e) {
     console.error('message push failed', e)
