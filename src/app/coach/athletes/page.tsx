@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { createAthlete, claimAthlete, updateAthlete, unclaimAthlete } from '@/app/actions/programs'
 import type { Athlete } from '@/types'
+import { InviteCard } from './InviteCard'
 
 export default function AthletesPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -126,6 +127,8 @@ async function handleUnclaim(athleteId: string) {
           Add Athlete
         </Button>
       </div>
+
+      <InviteCard />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />

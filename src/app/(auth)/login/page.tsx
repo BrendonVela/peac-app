@@ -31,6 +31,14 @@ export default function LoginPage() {
       return
     }
 
+    // Return to an invite link (or other page) if one was given
+    const next = new URL(window.location.href).searchParams.get('next')
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+      router.push(next)
+      router.refresh()
+      return
+    }
+
     const role = data.user?.user_metadata?.role
     if (role === 'coach') router.push('/coach/dashboard')
     else if (role === 'athlete') router.push('/athlete/dashboard')
@@ -69,6 +77,11 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
             />
+            <div className="flex justify-end -mt-2">
+              <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
+                Forgot password?
+              </Link>
+            </div>
 
             {error && (
               <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">

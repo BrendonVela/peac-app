@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [role, setRole] = useState<'coach' | 'athlete'>('athlete')
 const [inviteCode, setInviteCode] = useState('')
+  const [checkEmail, setCheckEmail] = useState(false)
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
@@ -56,7 +57,13 @@ const [inviteCode, setInviteCode] = useState('')
   }
   router.push('/coach/dashboard')
 } else {
-      await supabase.from('athletes').insert({ user_id: data.user.id, name })
+      // The athlete row is created by the database when the account is made
+      if (!data.session) {
+        setError('')
+        setLoading(false)
+        setCheckEmail(true)
+        return
+      }
       router.push('/athlete/dashboard')
     }
   }
@@ -69,6 +76,13 @@ const [inviteCode, setInviteCode] = useState('')
           <span className="text-2xl font-bold tracking-tight">PEAC</span>
         </div>
 
+        {checkEmail ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center space-y-3">
+            <h1 className="text-xl font-semibold">Confirm your email</h1>
+            <p className="text-sm text-zinc-400">We sent you a link. Tap it to confirm your account, then sign in.</p>
+            <Link href="/login" className="inline-block text-sm text-blue-400 hover:text-blue-300">Go to sign in</Link>
+          </div>
+        ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
           <h1 className="text-xl font-semibold mb-1">Create account</h1>
           <p className="text-sm text-zinc-400 mb-6">Get started with PEAC</p>
@@ -122,6 +136,7 @@ const [inviteCode, setInviteCode] = useState('')
             </Button>
           </form>
         </div>
+        )}
 
         <p className="text-center text-sm text-zinc-500 mt-6">
           Already have an account?{' '}
