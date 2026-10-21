@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { coachMatch } from '@/lib/acting'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { parseExcelProgram } from '@/lib/parseExcelProgram'
@@ -26,7 +27,7 @@ export async function importProgramFromExcel(formData: FormData) {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
   if (!coach) throw new Error('Coach profile not found')
 

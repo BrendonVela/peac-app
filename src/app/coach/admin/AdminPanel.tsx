@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ShieldCheck, Trash2, KeyRound, Copy, Check, UserPlus, RotateCcw, Search, ChevronRight,
+  ShieldCheck, Trash2, KeyRound, Copy, Check, UserPlus, RotateCcw, Search, ChevronRight, Eye,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -16,6 +16,7 @@ import {
   createCoachInvite, deleteCoachInvite, setAdmin, moveAthlete,
   deleteAthlete, deleteCoach, resetAthleteData,
 } from '@/app/actions/admin'
+import { startViewAs } from '@/app/actions/viewAs'
 
 export interface Person {
   kind: 'coach' | 'athlete'
@@ -126,6 +127,26 @@ export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; i
 
   const now = Date.now()
 
+  async function viewAs(kind: 'coach' | 'athlete', id: string) {
+    setBusy(`view-${id}`)
+    const res = await startViewAs(kind, id)
+    setBusy(null)
+    if (res && 'error' in res && res.error) flash(res.error, false)
+  }
+
+  function ViewAsButton({ kind, id }: { kind: 'coach' | 'athlete'; id: string }) {
+    return (
+      <button
+        onClick={() => viewAs(kind, id)}
+        disabled={busy === `view-${id}`}
+        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
+        title={`Open the app as this ${kind}`}
+      >
+        <Eye className="w-3.5 h-3.5" /> {busy === `view-${id}` ? 'Opening…' : 'View as'}
+      </button>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {msg && (
@@ -235,6 +256,7 @@ export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; i
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
+                    {!isMe && <ViewAsButton kind="coach" id={c.id} />}
                     <button
                       onClick={() => run(`admin-${c.id}`, () => setAdmin(c.id, !c.is_admin), c.is_admin ? 'Admin removed' : 'Made admin')}
                       disabled={busy === `admin-${c.id}`}
@@ -295,6 +317,7 @@ export function AdminPanel({ people, invites, myCoachId }: { people: Person[]; i
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
+                    <ViewAsButton kind="athlete" id={a.id} />
                     <select
                       value={a.coach_id ?? ''}
                       onChange={e => run(`move-${a.id}`, () => moveAthlete(a.id, e.target.value || null), 'Athlete moved')}

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { athleteMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Dumbbell, ChevronRight, Heart, CalendarDays, AlertTriangle, CheckCircle2 } from 'lucide-react'
@@ -19,7 +20,7 @@ export default async function AthleteDashboard() {
   const { data: athlete } = await supabase
     .from('athletes')
     .select('id, name, coach_id, coaches(name)')
-    .eq('user_id', user.id)
+    .match(await athleteMatch(supabase, user.id))
     .single()
 
   if (!athlete) redirect('/login')

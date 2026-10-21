@@ -13,6 +13,7 @@ import { createAthlete, claimAthlete, updateAthlete, unclaimAthlete } from '@/ap
 import { deleteAthlete } from '@/app/actions/admin'
 import type { Athlete } from '@/types'
 import { InviteCard } from './InviteCard'
+import { getActingCoachId } from '@/app/actions/viewAs'
 
 export default function AthletesPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -28,28 +29,20 @@ const [isAdmin, setIsAdmin] = useState(false)
   useEffect(() => {
     const supabase = createClient()
     supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+    getActingCoachId().then(coachId => {
+      if (!coachId) return
       supabase
-        .from('coaches')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-        .then(({ data: coach }) => {
-          if (!coach) return
-          supabase
-            .from('athletes')
-            .select('*')
-            .eq('coach_id', coach.id)
-            .order('name')
-            .then(({ data }) => setAthletes(data ?? []))
-            supabase
-          .from('athletes')
-          .select('*')
-          .is('coach_id', null)
-          .not('user_id', 'is', null)
-          .then(({ data }) => setUnclaimed(data ?? []))
-        })
+        .from('athletes')
+        .select('*')
+        .eq('coach_id', coachId)
+        .order('name')
+        .then(({ data }) => setAthletes(data ?? []))
+      supabase
+        .from('athletes')
+        .select('*')
+        .is('coach_id', null)
+        .not('user_id', 'is', null)
+        .then(({ data }) => setUnclaimed(data ?? []))
     })
   }, [showModal])
 

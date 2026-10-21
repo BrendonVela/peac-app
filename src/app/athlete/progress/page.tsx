@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { athleteMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -17,7 +18,7 @@ export default async function ProgressPage() {
   const { data: athlete } = await supabase
     .from('athletes')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await athleteMatch(supabase, user.id))
     .single()
 
   if (!athlete) redirect('/login')

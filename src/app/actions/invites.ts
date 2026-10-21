@@ -1,6 +1,7 @@
 'use server'
 
 import { randomInt } from 'crypto'
+import { coachMatch } from '@/lib/acting'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
@@ -19,7 +20,7 @@ export async function getOrCreateJoinCode() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  const { data: coach } = await supabase.from('coaches').select('id, join_code').eq('user_id', user.id).single()
+  const { data: coach } = await supabase.from('coaches').select('id, join_code').match(await coachMatch(supabase, user.id)).single()
   if (!coach) return { error: 'Coach not found' }
   if (coach.join_code) return { code: coach.join_code as string }
   return regenerateJoinCode()
@@ -33,7 +34,7 @@ export async function regenerateJoinCode() {
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = newCode()
-    const { error } = await supabase.from('coaches').update({ join_code: code }).eq('user_id', user.id)
+    const { error } = await supabase.from('coaches').update({ join_code: code }).match(await coachMatch(supabase, user.id))
     if (!error) {
       revalidatePath('/coach/athletes')
       return { code }

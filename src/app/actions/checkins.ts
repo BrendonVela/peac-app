@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { athleteMatch } from '@/lib/acting'
 import { revalidatePath } from 'next/cache'
 
 export async function submitCheckIn(formData: FormData) {
@@ -11,7 +12,7 @@ export async function submitCheckIn(formData: FormData) {
   const { data: athlete } = await supabase
     .from('athletes')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await athleteMatch(supabase, user.id))
     .single()
 
   if (!athlete) return { error: 'Athlete profile not found' }

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { coachMatch } from '@/lib/acting'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Users, CheckCircle2, AlertTriangle, Heart, ChevronRight, BookOpen } from 'lucide-react'
@@ -33,7 +34,7 @@ export default async function CoachDashboard() {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id, name')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
   if (!coach) redirect('/login')
 

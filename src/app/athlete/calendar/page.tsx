@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { athleteMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/Card'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
@@ -16,7 +17,7 @@ export default async function AthleteCalendarPage({
   const { data: athlete } = await supabase
     .from('athletes')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await athleteMatch(supabase, user.id))
     .single()
   if (!athlete) redirect('/login')
 

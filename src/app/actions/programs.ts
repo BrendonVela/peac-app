@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { coachMatch } from '@/lib/acting'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { todayISO } from '@/lib/schedule'
@@ -44,7 +45,7 @@ export async function createProgram(payload: ProgramPayload) {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   if (!coach) return { error: 'Coach profile not found' }
@@ -149,7 +150,7 @@ export async function createAthlete(formData: FormData) {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   if (!coach) return { error: 'Coach not found' }
@@ -175,7 +176,7 @@ export async function claimAthlete(athleteId: string) {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   if (!coach) return { error: 'Coach not found' }
@@ -202,7 +203,7 @@ export async function updateAthlete(athleteId: string, payload: {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   if (!coach) return { error: 'Coach profile not found' }
@@ -231,7 +232,7 @@ export async function unclaimAthlete(athleteId: string) {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   if (!coach) return { error: 'Coach profile not found' }

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { coachMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, BookOpen, Upload } from 'lucide-react'
@@ -15,7 +16,7 @@ export default async function ProgramsPage() {
   const { data: coach } = await supabase
     .from('coaches')
     .select('id')
-    .eq('user_id', user.id)
+    .match(await coachMatch(supabase, user.id))
     .single()
 
   const { data: programs } = await supabase

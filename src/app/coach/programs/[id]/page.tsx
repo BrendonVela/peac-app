@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { coachMatch } from '@/lib/acting'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Trash2 } from 'lucide-react'
@@ -23,7 +24,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user.id).single()
+  const { data: coach } = await supabase.from('coaches').select('id').match(await coachMatch(supabase, user.id)).single()
   if (!coach) redirect('/login')
 
   const { data: program } = await supabase
