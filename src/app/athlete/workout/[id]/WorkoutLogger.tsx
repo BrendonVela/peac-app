@@ -48,13 +48,28 @@ interface Props {
   initialCompleted: boolean
   initialNotes: string
   videoUrl?: string | null
+  lastTime?: { date: string; sets: { weight: number | null; reps: number | null }[] } | null
+}
+
+function formatLast(s: { weight: number | null; reps: number | null } | undefined): string | null {
+  if (!s || (s.weight == null && s.reps == null)) return null
+  if (s.weight != null && s.reps != null) return `${s.weight} × ${s.reps}`
+  return s.weight != null ? `${s.weight} lb` : `${s.reps} reps`
+}
+
+function daysAgoLabel(iso: string): string {
+  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 14) return `${days} days ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 type Row = { weight: string; reps: string; done: boolean }
 
 export function WorkoutLogger({
   workoutExerciseId, workoutId, athleteId, targets,
-  initialSetLogs, initialWeight, initialReps, initialCompleted, initialNotes, videoUrl,
+  initialSetLogs, initialWeight, initialReps, initialCompleted, initialNotes, videoUrl, lastTime,
 }: Props) {
   const setCount = Math.max(1, targets.length)
 
@@ -141,8 +156,16 @@ export function WorkoutLogger({
     persist(next, !completed)
   }
 
+  const lastSummary = lastTime ? lastTime.sets.map(formatLast).filter(Boolean).join(', ') : ''
+
   return (
     <div className="space-y-3">
+      {lastTime && lastSummary && (
+        <p className="text-xs text-violet-300/90">
+          <span className="text-zinc-500">Last time ({daysAgoLabel(lastTime.date)}):</span> {lastSummary}
+        </p>
+      )}
+
       {/* Sets */}
       <div className="rounded-lg border border-zinc-800 overflow-hidden">
         <div className="grid grid-cols-[1fr_76px_64px_40px] gap-2 px-3 py-1.5 bg-zinc-800/40 text-[10px] uppercase font-medium text-zinc-500">
@@ -165,6 +188,9 @@ export function WorkoutLogger({
                 <div className="min-w-0">
                   <p className={cn('text-xs font-medium', row.done ? 'text-green-400' : 'text-zinc-300')}>{t.label}</p>
                   <p className="text-[11px] text-zinc-500 truncate">{targetText(t)}</p>
+                  {formatLast(lastTime?.sets[i]) && (
+                    <p className="text-[11px] text-violet-300/80 truncate">Last: {formatLast(lastTime?.sets[i])}</p>
+                  )}
                 </div>
                 <input
                   value={row.weight}

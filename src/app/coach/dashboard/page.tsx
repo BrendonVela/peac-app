@@ -251,7 +251,7 @@ export default async function CoachDashboard() {
                 {recent.slice(0, 6).map(({ athleteId, athleteName, item }) => (
                   <Link
                     key={`${athleteId}-${item.workoutId}`}
-                    href={`/coach/athletes/${athleteId}`}
+                    href={`/coach/athletes/${athleteId}/workout/${item.workoutId}`}
                     className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/50 transition-colors"
                   >
                     <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />

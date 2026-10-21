@@ -35,7 +35,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
     .sort((a, b) => a.order - b.order)
 
   // Fetch existing results + warm-up progress
-  const [{ data: results }, { data: warmupLog }, { data: maxRows }] = await Promise.all([
+  const [{ data: results }, { data: warmupLog }, { data: maxRows }, { data: history }] = await Promise.all([
     supabase
       .from('workout_results')
       .select('*')
@@ -51,7 +51,31 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
       .from('athlete_maxes')
       .select('lift, value')
       .eq('athlete_id', athlete.id),
+    // Earlier logs of the same exercises, for "Last time" numbers
+    supabase
+      .from('workout_results')
+      .select('workout_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(exercise_id)')
+      .eq('athlete_id', athlete.id)
+      .neq('workout_id', params.id)
+      .order('logged_at', { ascending: false })
+      .limit(500),
   ])
+
+  // exercise_id -> most recent earlier log that has numbers in it
+  const lastTime = new Map<string, { date: string; sets: { weight: number | null; reps: number | null }[] }>()
+  ;(history ?? []).forEach((h: any) => {
+    const exId = h.workout_exercises?.exercise_id
+    if (!exId || lastTime.has(exId)) return
+    let sets: { weight: number | null; reps: number | null }[] = Array.isArray(h.set_logs)
+      ? h.set_logs.map((l: any) => ({ weight: l?.weight ?? null, reps: l?.reps ?? null }))
+      : []
+    if (sets.length === 0 && (h.weight_used != null || h.reps_completed != null)) {
+      sets = [{ weight: h.weight_used, reps: h.reps_completed }]
+    }
+    if (sets.some(x => x.weight != null || x.reps != null)) {
+      lastTime.set(exId, { date: h.logged_at, sets })
+    }
+  })
 
   const maxes: AthleteMaxes = {}
   ;(maxRows ?? []).forEach((m: any) => { maxes[m.lift as LiftKey] = Number(m.value) })
@@ -168,6 +192,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                     initialCompleted={existing?.completed ?? false}
                     initialNotes={existing?.notes ?? ''}
                     videoUrl={ex?.video_url}
+                    lastTime={ex?.id ? lastTime.get(ex.id) ?? null : null}
                   />
                 </CardContent>
               </Card>

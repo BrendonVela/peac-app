@@ -281,8 +281,13 @@ export function ScheduleCalendar({ items, athleteId, today, month, basePath, mod
                   Save day
                 </Button>
               )}
-              {mode === 'coach' && selected.status === 'done' && (
-                <Button variant="secondary" className="flex-1" onClick={() => setSelected(null)}>Close</Button>
+              {mode === 'coach' && (
+                <Link href={`/coach/athletes/${athleteId}/workout/${selected.workoutId}`} className="flex-1">
+                  <Button variant="secondary" className="w-full">
+                    <ExternalLink className="w-4 h-4" />
+                    View logged sets
+                  </Button>
+                </Link>
               )}
             </div>
           </div>
