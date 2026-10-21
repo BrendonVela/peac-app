@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Dumbbell, TrendingUp,
-  Heart, MessageCircle, LogOut, Menu, X, Zap, CalendarDays,
+  Heart, MessageCircle, LogOut, Menu, X, Zap, Settings, CalendarDays,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/app/actions/auth'
@@ -16,6 +16,7 @@ const nav = [
   { href: '/athlete/progress',  icon: TrendingUp,      label: 'Progress'  },
   { href: '/athlete/checkin',   icon: Heart,           label: 'Check-In'  },
   { href: '/athlete/messages',  icon: MessageCircle,   label: 'Messages'  },
+  { href: '/athlete/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function AthleteNav() {

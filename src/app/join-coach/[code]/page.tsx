@@ -49,6 +49,9 @@ export default async function JoinCoachPage({ params }: { params: { code: string
           <span className="text-2xl font-bold tracking-tight">PEAC</span>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">{content}</div>
+        <p className="text-center text-xs text-zinc-600 mt-4">
+          By creating an account you agree to our <Link href="/privacy" className="underline hover:text-zinc-400">Privacy Policy</Link>.
+        </p>
       </div>
     </div>
   )

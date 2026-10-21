@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Users, BookOpen, Dumbbell,
-  MessageCircle, LogOut, Menu, X, Zap, ShieldCheck,
+  MessageCircle, LogOut, Menu, X, Zap, Settings, ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/app/actions/auth'
@@ -16,6 +16,7 @@ const nav = [
   { href: '/coach/programs',  icon: BookOpen,         label: 'Programs'  },
   { href: '/coach/exercises', icon: Dumbbell,         label: 'Exercises' },
   { href: '/coach/messages',  icon: MessageCircle,    label: 'Messages'  },
+  { href: '/coach/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function CoachNav({ isAdmin = false }: { isAdmin?: boolean }) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Zap } from 'lucide-react'
@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/Button'
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [deletedNotice, setDeletedNotice] = useState(false)
+  useEffect(() => { setDeletedNotice(!!new URLSearchParams(window.location.search).get('deleted')) }, [])
   const [error, setError] = useState('')
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -95,11 +97,17 @@ export default function LoginPage() {
           </form>
         </div>
 
+        {deletedNotice && (
+          <p className="text-center text-sm text-green-400 mt-4">Your account has been deleted.</p>
+        )}
         <p className="text-center text-sm text-zinc-500 mt-6">
           Don&apos;t have an account?{' '}
           <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium">
             Sign up
           </Link>
+        </p>
+        <p className="text-center text-xs text-zinc-600 mt-4">
+          <Link href="/privacy" className="hover:text-zinc-400">Privacy Policy</Link>
         </p>
       </div>
     </div>
