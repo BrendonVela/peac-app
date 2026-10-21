@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { WorkoutLogger } from './WorkoutLogger'
 import { WarmupChecklist } from './WarmupChecklist'
+import { RestTimer } from './RestTimer'
+import { restForExercise } from '@/lib/rest'
 
 import { buildSetTargets, formatReps, targetsAreUniform, maxRatio, type AthleteMaxes } from '@/lib/setTargets'
 import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
@@ -89,7 +91,8 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
     exercises.length > 0 && doneCount === exercises.length ? 'done' : doneCount > 0 ? 'in_progress' : 'not_started'
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-2xl pb-40">
+      <RestTimer />
       <div className="flex items-center gap-3">
         <Link href="/athlete/dashboard" className="text-zinc-400 hover:text-white">
           <ArrowLeft className="w-5 h-5" />
@@ -135,6 +138,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
             const existing = resultMap.get(wx.id)
             const targets = buildSetTargets(wx, maxes)
             const personalized = maxRatio(wx, maxes) !== 1
+            const rest = restForExercise(wx)
             const uniform = targetsAreUniform(targets)
             return (
               <div key={wx.id} className="space-y-4">
@@ -165,7 +169,7 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                           </span>
                         )}
                         {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
-                        {wx.rest && <span className="text-xs text-zinc-500">Rest: {wx.rest}</span>}
+                        {rest.label && <span className="text-xs text-zinc-500">Rest: {rest.label}</span>}
                       </div>
                       {wx.notes && (
                         <p className="flex items-start gap-1.5 text-xs text-amber-200/80 mt-2">
@@ -193,6 +197,9 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
                     initialNotes={existing?.notes ?? ''}
                     videoUrl={ex?.video_url}
                     lastTime={ex?.id ? lastTime.get(ex.id) ?? null : null}
+                    restSeconds={rest.seconds}
+                    restLabel={rest.label}
+                    exerciseTitle={ex?.title ?? 'Exercise'}
                   />
                 </CardContent>
               </Card>

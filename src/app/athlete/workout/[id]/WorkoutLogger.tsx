@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink } from 'lucide-react'
+import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer } from 'lucide-react'
+import { formatClock, REST_START_EVENT, SET_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
 import { logWorkoutResult } from '@/app/actions/workouts'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +50,13 @@ interface Props {
   initialNotes: string
   videoUrl?: string | null
   lastTime?: { date: string; sets: { weight: number | null; reps: number | null }[] } | null
+  restSeconds?: number
+  restLabel?: string | null
+  exerciseTitle?: string
+}
+
+function fireRest(eventName: string, detail: RestEventDetail) {
+  window.dispatchEvent(new CustomEvent(eventName, { detail }))
 }
 
 function formatLast(s: { weight: number | null; reps: number | null } | undefined): string | null {
@@ -70,6 +78,7 @@ type Row = { weight: string; reps: string; done: boolean }
 export function WorkoutLogger({
   workoutExerciseId, workoutId, athleteId, targets,
   initialSetLogs, initialWeight, initialReps, initialCompleted, initialNotes, videoUrl, lastTime,
+  restSeconds = 90, restLabel = null, exerciseTitle = 'Exercise',
 }: Props) {
   const setCount = Math.max(1, targets.length)
 
@@ -140,12 +149,15 @@ export function WorkoutLogger({
   }
 
   function toggleSet(i: number) {
+    const wasDone = rows[i]?.done
     const next = rows.map((r, idx) => {
       if (idx !== i) return r
       return r.done ? { ...r, done: false } : { ...fillFromTarget(r, idx), done: true }
     })
     setRows(next)
     persist(next, next.every(r => r.done))
+    // Only starts if the athlete switched on auto-start in the timer
+    if (!wasDone && !next.every(r => r.done)) fireRest(SET_DONE_EVENT, { seconds: restSeconds, title: exerciseTitle })
   }
 
   function toggleAll() {
@@ -262,6 +274,15 @@ export function WorkoutLogger({
           className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all whitespace-nowrap"
         >
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+        </button>
+
+        <button
+          onClick={() => fireRest(REST_START_EVENT, { seconds: restSeconds, title: exerciseTitle })}
+          className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all whitespace-nowrap"
+          title={restLabel ? `Coach: rest ${restLabel}` : 'Start a rest timer'}
+        >
+          <Timer className="w-4 h-4" />
+          Rest {formatClock(restSeconds)}
         </button>
 
         {/* Video control (right side) */}
