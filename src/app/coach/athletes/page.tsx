@@ -116,7 +116,12 @@ async function handleUnclaim(athleteId: string) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Athletes</h1>
-          <p className="text-zinc-400 text-sm mt-0.5">{athletes.length} total</p>
+          <p className="text-zinc-400 text-sm mt-0.5">
+            {athletes.length} total
+            {athletes.some(a => !a.user_id) && (
+              <span className="text-amber-400"> · {athletes.filter(a => !a.user_id).length} not signed up</span>
+            )}
+          </p>
         </div>
         <Button onClick={() => setShowModal(true)} size="sm">
           <Plus className="w-4 h-4" />
@@ -188,7 +193,17 @@ async function handleUnclaim(athleteId: string) {
                       {athlete.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-medium text-white">{athlete.name}</p>
+                      <p className="font-medium text-white flex flex-wrap items-center gap-2">
+                        {athlete.name}
+                        {!athlete.user_id && (
+                          <span
+                            title="Added by you — this athlete hasn't made an account yet"
+                            className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                          >
+                            Not signed up
+                          </span>
+                        )}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5">
                         {athlete.sport && <Badge variant="blue">{athlete.sport}</Badge>}
                         {athlete.position && <span className="text-xs text-zinc-500">{athlete.position}</span>}
