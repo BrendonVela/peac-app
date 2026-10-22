@@ -18,6 +18,7 @@ import {
   deleteAthlete, deleteCoach, resetAthleteData,
 } from '@/app/actions/admin'
 import { startViewAs } from '@/app/actions/viewAs'
+import { adminSetJoinCode } from '@/app/actions/invites'
 
 export interface Person {
   kind: 'coach' | 'athlete'
@@ -57,7 +58,7 @@ type Dialog =
   | { type: 'password'; p: Person }
   | null
 
-export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: Person[]; invites: CoachInvite[]; myCoachId: string | null; coachCode: string | null }) {
+export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }: { people: Person[]; invites: CoachInvite[]; myCoachId: string | null; coachCode: string | null; joinCodes: Record<string, string | null> }) {
   const router = useRouter()
   const coaches = people.filter(p => p.kind === 'coach').sort((a, b) => a.name.localeCompare(b.name))
   const athletes = people.filter(p => p.kind === 'athlete').sort((a, b) => a.name.localeCompare(b.name))
@@ -74,6 +75,8 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
   const [copied, setCopied] = useState<string | null>(null)
   const [codeDraft, setCodeDraft] = useState(coachCode ?? '')
   const [newPw, setNewPw] = useState('')
+  const [codeEditFor, setCodeEditFor] = useState<string | null>(null)
+  const [joinDraft, setJoinDraft] = useState('')
   const [showPw, setShowPw] = useState(false)
 
   const filteredAthletes = useMemo(() => {
@@ -319,6 +322,43 @@ export function AdminPanel({ people, invites, myCoachId, coachCode }: { people: 
                     <p className="text-xs text-zinc-500 truncate">
                       {c.email ?? 'No login'} · {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · Last sign-in {fmt(c.last_sign_in_at)}
                     </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-zinc-500">Athlete code:</span>
+                      {codeEditFor === c.id ? (
+                        <>
+                          <input
+                            value={joinDraft}
+                            onChange={e => setJoinDraft(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                            maxLength={20}
+                            autoFocus
+                            className="w-32 bg-zinc-800 border border-zinc-700 rounded-md px-2 py-1 font-mono text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            disabled={busy === `jc-${c.id}` || joinDraft.length < 4}
+                            onClick={async () => { if (await run(`jc-${c.id}`, () => adminSetJoinCode(c.id, joinDraft), `Code changed for ${c.name}`)) setCodeEditFor(null) }}
+                            className="px-2 py-1 rounded-md bg-blue-600 text-white disabled:opacity-50"
+                          >Save</button>
+                          <button
+                            disabled={busy === `jc-${c.id}`}
+                            onClick={async () => { if (await run(`jc-${c.id}`, () => adminSetJoinCode(c.id, null), `New random code for ${c.name}`)) setCodeEditFor(null) }}
+                            className="px-2 py-1 rounded-md border border-zinc-700 text-zinc-300 hover:text-white"
+                          >Random</button>
+                          <button onClick={() => setCodeEditFor(null)} className="text-zinc-500 hover:text-white">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-mono font-semibold text-white">{joinCodes[c.id] ?? 'none yet'}</span>
+                          {joinCodes[c.id] && (
+                            <button onClick={() => copy(joinCodes[c.id]!, `jc-${c.id}`)} className="text-blue-400 hover:text-blue-300">
+                              {copied === `jc-${c.id}` ? 'Copied' : 'Copy'}
+                            </button>
+                          )}
+                          <button onClick={() => { setJoinDraft(joinCodes[c.id] ?? ''); setCodeEditFor(c.id) }} className="text-zinc-400 hover:text-white">
+                            {joinCodes[c.id] ? 'Change' : 'Set code'}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     {!isMe && <ViewAsButton kind="coach" id={c.id} />}

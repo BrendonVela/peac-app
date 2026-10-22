@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Link2, Copy, Check, RefreshCw, Share2 } from 'lucide-react'
+import { Link2, Copy, Check, RefreshCw, Share2, Pencil } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
-import { getOrCreateJoinCode, regenerateJoinCode } from '@/app/actions/invites'
+import { getOrCreateJoinCode, regenerateJoinCode, setMyJoinCode } from '@/app/actions/invites'
 
 export function InviteCard() {
   const [code, setCode] = useState<string | null>(null)
@@ -11,6 +11,9 @@ export function InviteCard() {
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const [canShare, setCanShare] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [codeCopied, setCodeCopied] = useState(false)
 
   useEffect(() => {
     setCanShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function')
@@ -40,6 +43,23 @@ export function InviteCard() {
     } catch { /* user closed the share sheet */ }
   }
 
+  async function saveCode() {
+    setBusy(true); setError('')
+    const res = await setMyJoinCode(draft)
+    setBusy(false)
+    if (res && 'code' in res && res.code) { setCode(res.code); setEditing(false) }
+    else if (res && 'error' in res && res.error) setError(res.error)
+  }
+
+  async function copyCode() {
+    if (!code) return
+    try {
+      await navigator.clipboard.writeText(code)
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+
   async function regenerate() {
     if (!confirm('Make a new link? The old link will stop working for anyone who hasn’t signed up yet.')) return
     setBusy(true)
@@ -59,9 +79,37 @@ export function InviteCard() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white">Invite athletes</p>
             <p className="text-xs text-zinc-400">
-              Send this link to your athletes. When they sign up with it, they&apos;re added to your roster automatically.
+              Send this link to your athletes, or give them your code to type on the Sign up page. Either way they&apos;re added to your roster automatically. Athletes can&apos;t sign up without a coach code.
             </p>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-zinc-800/50 border border-zinc-800 px-3 py-2.5">
+          <span className="text-xs uppercase tracking-wide text-zinc-500">Your code</span>
+          {editing ? (
+            <>
+              <input
+                value={draft}
+                onChange={e => setDraft(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                placeholder="e.g. VELA-SPEED"
+                maxLength={20}
+                autoFocus
+                className="w-40 bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-sm font-mono text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button onClick={saveCode} disabled={busy || draft.length < 4} className="text-xs px-2.5 py-1 rounded-md bg-blue-600 text-white disabled:opacity-50">Save</button>
+              <button onClick={() => { setEditing(false); setError('') }} className="text-xs text-zinc-400 hover:text-white">Cancel</button>
+            </>
+          ) : (
+            <>
+              <span className="font-mono text-lg font-bold tracking-wider text-white">{code ?? '…'}</span>
+              <button onClick={copyCode} disabled={!code} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+                {codeCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{codeCopied ? 'Copied' : 'Copy'}
+              </button>
+              <button onClick={() => { setDraft(code ?? ''); setEditing(true) }} disabled={!code} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white">
+                <Pencil className="w-3.5 h-3.5" /> Change
+              </button>
+            </>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">

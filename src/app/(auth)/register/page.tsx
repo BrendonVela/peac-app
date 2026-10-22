@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Zap } from 'lucide-react'
@@ -14,8 +14,28 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [role, setRole] = useState<'coach' | 'athlete'>('athlete')
-const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
+  const [athleteCode, setAthleteCode] = useState('')
+  const [coachName, setCoachName] = useState<string | null>(null)
   const [checkEmail, setCheckEmail] = useState(false)
+
+  // Allow links like /register?code=ABC123
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('code')
+    if (c) setAthleteCode(c.toUpperCase())
+  }, [])
+
+  // Show which coach the athlete code belongs to
+  useEffect(() => {
+    const c = athleteCode.trim()
+    if (c.length < 4) { setCoachName(null); return }
+    const t = setTimeout(async () => {
+      const { data } = await createClient().rpc('coach_name_for_code', { code: c })
+      setCoachName((data as string | null) ?? null)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [athleteCode])
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
@@ -28,14 +48,37 @@ const [inviteCode, setInviteCode] = useState('')
 
     const supabase = createClient()
 
+    // Check the code BEFORE making the account
+    if (role === 'athlete') {
+      const { data: found } = await supabase.rpc('coach_name_for_code', { code: athleteCode.trim() })
+      if (!found) {
+        setError('That coach code isn\u2019t right. Ask your coach for their code or sign-up link.')
+        setLoading(false)
+        return
+      }
+    } else {
+      const { data: ok } = await supabase.rpc('coach_signup_code_valid', { code: inviteCode.trim() })
+      if (!ok) {
+        setError('That coach sign-up code isn\u2019t right.')
+        setLoading(false)
+        return
+      }
+    }
+
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name, role } },
+      options: {
+        data: role === 'athlete'
+          ? { name, role, join_code: athleteCode.trim().toUpperCase() }
+          : { name, role },
+      },
     })
 
     if (signUpError) {
-      setError(signUpError.message)
+      setError(/database error/i.test(signUpError.message)
+        ? 'Could not create the account. Check your coach code and try again.'
+        : signUpError.message)
       setLoading(false)
       return
     }
@@ -46,22 +89,21 @@ const [inviteCode, setInviteCode] = useState('')
       return
     }
 
-   if (role === 'coach') {
-  // New one-time coach invites first, then the older shared code
-  const { data: claimedInvite } = await supabase.rpc('claim_coach_invite', { code: inviteCode })
-  const { error: claimError } = claimedInvite
-    ? { error: null }
-    : await supabase.rpc('claim_coach_role', { invite_code: inviteCode })
-  if (claimError) {
-    setError('Invalid coach invite code.')
-    setLoading(false)
-    return
-  }
-  router.push('/coach/dashboard')
-} else {
-      // The athlete row is created by the database when the account is made
+    if (role === 'coach') {
+      // One-time coach invites first, then the shared coach code
+      const { data: claimedInvite } = await supabase.rpc('claim_coach_invite', { code: inviteCode })
+      const { error: claimError } = claimedInvite
+        ? { error: null }
+        : await supabase.rpc('claim_coach_role', { invite_code: inviteCode })
+      if (claimError) {
+        setError('Invalid coach invite code.')
+        setLoading(false)
+        return
+      }
+      await supabase.auth.refreshSession()
+      router.push('/coach/dashboard')
+    } else {
       if (!data.session) {
-        setError('')
         setLoading(false)
         setCheckEmail(true)
         return
@@ -111,18 +153,37 @@ const [inviteCode, setInviteCode] = useState('')
                 ))}
               </div>
             </div>
-{role === 'coach' && (
-  <Input
-    label="Coach Invite Code"
-    id="inviteCode"
-    name="inviteCode"
-    type="text"
-    placeholder="Enter your invite code"
-    required
-    value={inviteCode}
-    onChange={(e) => setInviteCode(e.target.value)}
-  />
-)}
+            {role === 'coach' ? (
+              <Input
+                label="Coach sign-up code"
+                id="inviteCode"
+                name="inviteCode"
+                type="text"
+                placeholder="Code from PEAC"
+                required
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value)}
+              />
+            ) : (
+              <div className="space-y-1.5">
+                <Input
+                  label="Your coach's code"
+                  id="athleteCode"
+                  name="athleteCode"
+                  type="text"
+                  placeholder="Ask your coach for it"
+                  required
+                  autoCapitalize="characters"
+                  value={athleteCode}
+                  onChange={e => setAthleteCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                />
+                {athleteCode.trim().length >= 4 && (
+                  <p className={cn('text-xs', coachName ? 'text-green-400' : 'text-zinc-500')}>
+                    {coachName ? `You\u2019ll join Coach ${coachName}` : 'No coach found with that code yet'}
+                  </p>
+                )}
+              </div>
+            )}
             <Input label="Full Name" id="name" name="name" type="text" placeholder="John Smith" required />
             <Input label="Email" id="email" name="email" type="email" placeholder="you@example.com" required autoComplete="email" />
             <Input label="Password" id="password" name="password" type="password" placeholder="••••••••" required minLength={6} autoComplete="new-password" />

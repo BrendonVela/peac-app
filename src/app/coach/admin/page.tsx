@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { AdminPanel, type Person, type CoachInvite } from './AdminPanel'
 
 export default async function AdminPage() {
@@ -15,6 +16,13 @@ export default async function AdminPage() {
     supabase.from('coach_invites').select('*').order('created_at', { ascending: false }),
     supabase.from('app_settings').select('value').eq('key', 'coach_signup_code').maybeSingle(),
   ])
+
+  const adminDb = createAdminClient()
+  const { data: codeRows } = adminDb
+    ? await adminDb.from('coaches').select('id, join_code')
+    : { data: [] as { id: string; join_code: string | null }[] }
+  const joinCodes: Record<string, string | null> = {}
+  ;(codeRows ?? []).forEach((r: { id: string; join_code: string | null }) => { joinCodes[r.id] = r.join_code })
 
   const me = ((people ?? []) as Person[]).find(p => p.kind === 'coach' && p.user_id === user.id)
 
@@ -32,6 +40,7 @@ export default async function AdminPage() {
           invites={(invites ?? []) as CoachInvite[]}
           myCoachId={me?.id ?? null}
           coachCode={codeRow?.value ?? null}
+          joinCodes={joinCodes}
         />
       )}
     </div>
