@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer } from 'lucide-react'
-import { formatClock, REST_START_EVENT, SET_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
+import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
 import { logWorkoutResult } from '@/app/actions/workouts'
 import { cn } from '@/lib/utils'
 
@@ -53,6 +53,8 @@ interface Props {
   restSeconds?: number
   restLabel?: string | null
   exerciseTitle?: string
+  /** false inside a superset (except the last exercise) so the timer doesn't start between A1 and A2 */
+  autoRest?: boolean
 }
 
 function fireRest(eventName: string, detail: RestEventDetail) {
@@ -78,7 +80,7 @@ type Row = { weight: string; reps: string; done: boolean }
 export function WorkoutLogger({
   workoutExerciseId, workoutId, athleteId, targets,
   initialSetLogs, initialWeight, initialReps, initialCompleted, initialNotes, videoUrl, lastTime,
-  restSeconds = 90, restLabel = null, exerciseTitle = 'Exercise',
+  restSeconds = 90, restLabel = null, exerciseTitle = 'Exercise', autoRest = true,
 }: Props) {
   const setCount = Math.max(1, targets.length)
 
@@ -112,6 +114,7 @@ export function WorkoutLogger({
   async function persist(nextRows: Row[], isCompleted: boolean) {
     setSaving(true)
     setCompleted(isCompleted)
+    window.dispatchEvent(new CustomEvent(EXERCISE_DONE_EVENT, { detail: { id: workoutExerciseId, completed: isCompleted } }))
 
     const setLogs: SetLog[] = nextRows.map(r => ({
       weight: r.weight !== '' ? parseFloat(r.weight) : null,
@@ -157,7 +160,7 @@ export function WorkoutLogger({
     setRows(next)
     persist(next, next.every(r => r.done))
     // Only starts if the athlete switched on auto-start in the timer
-    if (!wasDone && !next.every(r => r.done)) fireRest(SET_DONE_EVENT, { seconds: restSeconds, title: exerciseTitle })
+    if (autoRest && !wasDone && !next.every(r => r.done)) fireRest(SET_DONE_EVENT, { seconds: restSeconds, title: exerciseTitle })
   }
 
   function toggleAll() {

@@ -50,4 +50,7 @@ export function formatClock(totalSeconds: number): string {
 // Simple page-wide events so any exercise can start the one timer
 export const REST_START_EVENT = 'peac:rest-start'
 export const SET_DONE_EVENT = 'peac:set-done'
+/** Fired by an exercise logger when the exercise becomes complete / not complete */
+export const EXERCISE_DONE_EVENT = 'peac:exercise-done'
+export interface ExerciseDoneDetail { id: string; completed: boolean }
 export interface RestEventDetail { seconds: number; title: string }

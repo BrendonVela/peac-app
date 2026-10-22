@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/Badge'
 import { WorkoutLogger } from './WorkoutLogger'
 import { WarmupChecklist } from './WarmupChecklist'
 import { RestTimer } from './RestTimer'
-import { restForExercise } from '@/lib/rest'
+import { GuidedWorkout, type GuidedStep } from './GuidedWorkout'
+import { restForExercise, restFromText } from '@/lib/rest'
 
 import { buildSetTargets, formatReps, targetsAreUniform, maxRatio, type AthleteMaxes } from '@/lib/setTargets'
 import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
@@ -91,6 +92,143 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
   const status =
     exercises.length > 0 && doneCount === exercises.length ? 'done' : doneCount > 0 ? 'in_progress' : 'not_started'
 
+  // ---------- Build the step-by-step flow ----------
+  const cleanSection = (sec: string | null) => (sec ? String(sec).replace(/^★\s*/, '').trim() : null)
+  const isGroupSection = (sec: string | null) => !!sec && /COMPLEX|SUPERSET|SUPER SET|CIRCUIT|TRI-?SET|GIANT SET/i.test(sec)
+
+  const renderExercise = (wx: any, i: number, tag: string | null, autoRest = true) => {
+    const ex = wx.exercises
+    const existing = resultMap.get(wx.id)
+    const targets = buildSetTargets(wx, maxes)
+    const personalized = maxRatio(wx, maxes) !== 1
+    const rest = restForExercise(wx)
+    const uniform = targetsAreUniform(targets)
+    return (
+      <Card key={wx.id}>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                {tag ? (
+                  <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-200">{tag}</span>
+                ) : (
+                  <span className="text-xs text-zinc-600 font-mono">{i + 1}.</span>
+                )}
+                <CardTitle>{ex?.title}</CardTitle>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span className="text-xs text-zinc-400">{targets.length} {targets.length === 1 ? 'set' : 'sets'}</span>
+                {uniform && targets[0]?.reps && <span className="text-xs text-zinc-400">{formatReps(targets[0].reps)}</span>}
+                {uniform && targets[0]?.weight && <span className="text-xs text-zinc-400">{targets[0].weight}</span>}
+                {!uniform && <span className="text-xs text-blue-400">Targets change by set</span>}
+                {personalized && (
+                  <span className="text-xs text-emerald-400">
+                    Set from your {LIFT_LABEL[wx.max_lift as LiftKey]} max ({maxes[wx.max_lift as LiftKey]} lb)
+                  </span>
+                )}
+                {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
+                {rest.label && <span className="text-xs text-zinc-500">Rest: {rest.label}</span>}
+              </div>
+              {wx.notes && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-200/80 mt-2">
+                  <ClipboardList className="w-3.5 h-3.5 mt-px shrink-0 text-amber-400" />
+                  <span>{wx.notes}</span>
+                </p>
+              )}
+              {ex?.coaching_cues && (
+                <p className="text-xs text-zinc-500 italic mt-1">&ldquo;{ex.coaching_cues}&rdquo;</p>
+              )}
+            </div>
+            {ex?.category && <Badge variant="default">{ex.category}</Badge>}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <WorkoutLogger
+            workoutExerciseId={wx.id}
+            workoutId={params.id}
+            athleteId={athlete.id}
+            targets={targets}
+            initialSetLogs={existing?.set_logs ?? null}
+            initialWeight={existing?.weight_used ?? undefined}
+            initialReps={existing?.reps_completed ?? undefined}
+            initialCompleted={existing?.completed ?? false}
+            initialNotes={existing?.notes ?? ''}
+            videoUrl={ex?.video_url}
+            lastTime={ex?.id ? lastTime.get(ex.id) ?? null : null}
+            restSeconds={rest.seconds}
+            restLabel={rest.label}
+            exerciseTitle={ex?.title ?? 'Exercise'}
+            autoRest={autoRest}
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const steps: GuidedStep[] = []
+  const cards: React.ReactNode[] = []
+
+  if (warmupItems.length > 0) {
+    steps.push({
+      key: 'warmup', kind: 'warmup', section: null, title: warmup?.title || 'Warm-up',
+      exerciseIds: [], labels: [], sets: 0, restLabel: null,
+    })
+    cards.push(
+      <WarmupChecklist
+        key="warmup"
+        athleteId={athlete.id}
+        workoutId={params.id}
+        title={warmup?.title || 'Warm-up'}
+        items={warmupItems}
+        initialDone={Array.isArray(warmupLog?.done) ? (warmupLog!.done as number[]) : []}
+      />
+    )
+  }
+
+  let groupCount = 0
+  for (let i = 0; i < exercises.length; ) {
+    const wx: any = exercises[i]
+    const sec = wx.section ?? null
+    // Exercises that share a "COMPLEX / SUPERSET" section are done back-to-back
+    let j = i + 1
+    if (isGroupSection(sec)) {
+      while (j < exercises.length && (exercises[j] as any).section === sec) j++
+    }
+    const members = exercises.slice(i, j) as any[]
+    const section = cleanSection(sec)
+    if (members.length > 1) {
+      const letterMatch = section?.match(/(?:COMPLEX|SUPERSET|CIRCUIT)\s+([A-Z])\b/i)
+      const letter = (letterMatch?.[1] ?? String.fromCharCode(65 + groupCount)).toUpperCase()
+      groupCount++
+      const labels = members.map((m, k) => ({ id: m.id, tag: `${letter}${k + 1}`, name: m.exercises?.title ?? 'Exercise' }))
+      const sets = Math.max(...members.map(m => buildSetTargets(m, maxes).length))
+      const restLabel = restFromText(section)?.label ?? null
+      steps.push({
+        key: `g-${wx.id}`, kind: 'group', section,
+        title: `Superset ${letter}: ${labels.map(l => l.name.split(/[—(]/)[0].trim()).join(' + ')}`,
+        exerciseIds: members.map(m => m.id), labels, sets, restLabel,
+      })
+      cards.push(
+        <div key={`g-${wx.id}`} className="space-y-3 border-l-2 border-orange-500/50 pl-3">
+          {members.map((m, k) => renderExercise(m, i + k, labels[k].tag, k === members.length - 1))}
+        </div>
+      )
+    } else {
+      const targets = buildSetTargets(wx, maxes)
+      steps.push({
+        key: wx.id, kind: 'single', section,
+        title: wx.exercises?.title ?? 'Exercise',
+        exerciseIds: [wx.id], labels: [], sets: targets.length, restLabel: restForExercise(wx).label,
+      })
+      cards.push(renderExercise(wx, i, null))
+    }
+    i = j
+  }
+
+  const initialDone: Record<string, boolean> = {}
+  exercises.forEach((wx: any) => { initialDone[wx.id] = !!resultMap.get(wx.id)?.completed })
+  const warmupDone = warmupItems.length > 0 && Array.isArray(warmupLog?.done) && (warmupLog!.done as number[]).length >= warmupItems.length
+
   return (
     <div className="space-y-6 max-w-2xl pb-40">
       <RestTimer />
@@ -104,110 +242,8 @@ export default async function WorkoutPage({ params }: { params: { id: string } }
         </div>
       </div>
 
-      {exercises.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">{doneCount} of {exercises.length} exercises complete</span>
-            <Badge variant={status === 'done' ? 'green' : status === 'in_progress' ? 'blue' : 'default'}>
-              {status === 'done' ? 'Done' : status === 'in_progress' ? 'In progress' : 'Not started'}
-            </Badge>
-          </div>
-          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
-              style={{ width: `${Math.round((doneCount / exercises.length) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {warmupItems.length > 0 && (
-        <WarmupChecklist
-          athleteId={athlete.id}
-          workoutId={params.id}
-          title={warmup?.title || 'Warm-up'}
-          items={warmupItems}
-          initialDone={Array.isArray(warmupLog?.done) ? (warmupLog!.done as number[]) : []}
-        />
-      )}
-
-      {exercises.length > 0 ? (
-        <div className="space-y-4">
-          {exercises.map((wx: any, i: number) => {
-            const ex = wx.exercises
-            const showSection = !!wx.section && wx.section !== exercises[i - 1]?.section
-            const existing = resultMap.get(wx.id)
-            const targets = buildSetTargets(wx, maxes)
-            const personalized = maxRatio(wx, maxes) !== 1
-            const rest = restForExercise(wx)
-            const uniform = targetsAreUniform(targets)
-            return (
-              <div key={wx.id} className="space-y-4">
-              {showSection && (
-                <div className="flex items-center gap-3 pt-2">
-                  <h2 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-                    {String(wx.section).replace(/^★\s*/, '')}
-                  </h2>
-                  <div className="flex-1 h-px bg-zinc-800" />
-                </div>
-              )}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-zinc-600 font-mono">{i + 1}.</span>
-                        <CardTitle>{ex?.title}</CardTitle>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <span className="text-xs text-zinc-400">{targets.length} {targets.length === 1 ? 'set' : 'sets'}</span>
-                        {uniform && targets[0]?.reps && <span className="text-xs text-zinc-400">{formatReps(targets[0].reps)}</span>}
-                        {uniform && targets[0]?.weight && <span className="text-xs text-zinc-400">{targets[0].weight}</span>}
-                        {!uniform && <span className="text-xs text-blue-400">Targets change by set</span>}
-                        {personalized && (
-                          <span className="text-xs text-emerald-400">
-                            Set from your {LIFT_LABEL[wx.max_lift as LiftKey]} max ({maxes[wx.max_lift as LiftKey]} lb)
-                          </span>
-                        )}
-                        {wx.tempo && <span className="text-xs text-zinc-500">Tempo: {wx.tempo}</span>}
-                        {rest.label && <span className="text-xs text-zinc-500">Rest: {rest.label}</span>}
-                      </div>
-                      {wx.notes && (
-                        <p className="flex items-start gap-1.5 text-xs text-amber-200/80 mt-2">
-                          <ClipboardList className="w-3.5 h-3.5 mt-px shrink-0 text-amber-400" />
-                          <span>{wx.notes}</span>
-                        </p>
-                      )}
-                      {ex?.coaching_cues && (
-                        <p className="text-xs text-zinc-500 italic mt-1">&ldquo;{ex.coaching_cues}&rdquo;</p>
-                      )}
-                    </div>
-                    {ex?.category && <Badge variant="default">{ex.category}</Badge>}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <WorkoutLogger
-                    workoutExerciseId={wx.id}
-                    workoutId={params.id}
-                    athleteId={athlete.id}
-                    targets={targets}
-                    initialSetLogs={existing?.set_logs ?? null}
-                    initialWeight={existing?.weight_used ?? undefined}
-                    initialReps={existing?.reps_completed ?? undefined}
-                    initialCompleted={existing?.completed ?? false}
-                    initialNotes={existing?.notes ?? ''}
-                    videoUrl={ex?.video_url}
-                    lastTime={ex?.id ? lastTime.get(ex.id) ?? null : null}
-                    restSeconds={rest.seconds}
-                    restLabel={rest.label}
-                    exerciseTitle={ex?.title ?? 'Exercise'}
-                  />
-                </CardContent>
-              </Card>
-              </div>
-            )
-          })}
-        </div>
+      {exercises.length > 0 || warmupItems.length > 0 ? (
+        <GuidedWorkout steps={steps} cards={cards} initialDone={initialDone} warmupDone={warmupDone} />
       ) : (
         <Card>
           <CardContent className="py-10 text-center text-sm text-zinc-500">
