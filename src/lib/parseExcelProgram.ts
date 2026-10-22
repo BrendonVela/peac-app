@@ -25,6 +25,16 @@ export interface ParsedDay {
   exercises: ParsedExercise[]
 }
 
+/** "DAY 1 — …" or "MON — …" / "Monday - …" starts a new training day */
+const DAY_HEADER = /^(DAY\s*(\d+|[A-Z])\b|(MON|TUES?|WED(NES)?|THU(RS?)?|FRI|SAT(UR)?|SUN)(DAY)?)\b\.?\s*[—–:-]/i
+
+/** Numbers in the weight column are pounds: 210 -> "210 lb" */
+function cellText(v: any): string | null {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v === 'number') return `${Math.round(v * 10) / 10} lb`
+  return String(v).trim() || null
+}
+
 function isWarmupSection(section: string | null): boolean {
   return !!section && /WARM[\s-]?UP/i.test(section)
 }
@@ -99,7 +109,15 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       const first = row[0]
       const firstTrimmed = typeof first === 'string' ? first.trim() : first
 
-      if (typeof firstTrimmed === 'string' && firstTrimmed.startsWith('DAY ')) {
+      // A testing/results table after the training days isn't a workout
+      if (typeof firstTrimmed === 'string' && /^★?\s*WEEK\s*\d+\s*[—–-]\s*TESTING/i.test(firstTrimmed.replace(/^★\s*/, ''))) {
+        currentDay = null
+        currentSection = null
+        i++
+        continue
+      }
+
+      if (typeof firstTrimmed === 'string' && DAY_HEADER.test(firstTrimmed)) {
         currentDay = { title: firstTrimmed, warmup: null, exercises: [] }
         currentSection = null
         rawDays.push(currentDay)
@@ -138,7 +156,8 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
 
       if (isExerciseStart) {
         const exercise: RawExercise = {
-          name: String(row[1]),
+          // "FC1a: Back Squat" -> "Back Squat" (the complex is already shown by its section)
+          name: String(row[1]).replace(/^[A-Z]{1,3}\d{1,2}[a-z]?\s*[:.)]\s*/, '').trim() || String(row[1]),
           section: currentSection,
           coachingNote: null,
           sets: [],
@@ -203,7 +222,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
             .filter(s => s.weeks[wb.week])
             .map(s => ({
               setLabel: s.setLabel,
-              prescWt: s.weeks[wb.week].prescWt !== null ? String(s.weeks[wb.week].prescWt) : null,
+              prescWt: cellText(s.weeks[wb.week].prescWt),
               prescReps: s.weeks[wb.week].prescReps !== null ? String(s.weeks[wb.week].prescReps) : null,
             }))
           if (setsThisWeek.length > 0) {

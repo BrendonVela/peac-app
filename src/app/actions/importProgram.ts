@@ -163,7 +163,10 @@ export async function importProgramFromExcel(formData: FormData) {
         .select('id')
         .single()
 
-      if (workoutError || !workout) continue
+      if (workoutError || !workout) {
+        console.error(`[import] workout "${day.title}" failed: ${workoutError?.message}`)
+        continue
+      }
       workoutCount++
 
       const exerciseRows = day.exercises
@@ -196,7 +199,8 @@ export async function importProgramFromExcel(formData: FormData) {
         })
 
       if (exerciseRows.length > 0) {
-        await supabase.from('workout_exercises').insert(exerciseRows)
+        const { error: wxError } = await supabase.from('workout_exercises').insert(exerciseRows)
+        if (wxError) console.error(`[import] exercises for "${day.title}" failed: ${wxError.message}`)
         exerciseInstanceCount += exerciseRows.length
       }
     }

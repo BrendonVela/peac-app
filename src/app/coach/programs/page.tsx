@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
 import { importProgramFromExcel } from '@/app/actions/importProgram'
 
+// Big Excel imports can take a while
+export const maxDuration = 60
+
 export default async function ProgramsPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
