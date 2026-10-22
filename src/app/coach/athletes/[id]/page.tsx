@@ -9,6 +9,7 @@ import { AddPerformanceTestForm } from './AddPerformanceTestForm'
 import { StartDateForm } from './StartDateForm'
 import { MaxesForm } from './MaxesForm'
 import { ManageAthlete } from './ManageAthlete'
+import { LinkAccount, type SignedUpAthlete } from './LinkAccount'
 import { LiftProgress } from '@/components/LiftProgress'
 import { getLiftHistory } from '@/lib/liftHistory'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
@@ -50,6 +51,18 @@ export default async function AthleteDetailPage({
     getLiftHistory(supabase, params.id),
     supabase.rpc('is_admin'),
   ])
+
+  // Hand-added athlete with no login: offer to combine with the account they made
+  let linkCandidates: SignedUpAthlete[] | null = null
+  if (!athlete.user_id && athlete.coach_id) {
+    const { data } = await supabase
+      .from('athletes')
+      .select('id, name, created_at')
+      .eq('coach_id', athlete.coach_id)
+      .not('user_id', 'is', null)
+      .order('created_at', { ascending: false })
+    linkCandidates = (data ?? []) as SignedUpAthlete[]
+  }
 
   const maxes: Record<string, number> = {}
   let maxesUpdated: string | null = null
@@ -250,6 +263,8 @@ export default async function AthleteDetailPage({
           )}
         </CardContent>
       </Card>
+      {linkCandidates && <LinkAccount athleteId={params.id} name={athlete.name} candidates={linkCandidates} />}
+
       <ManageAthlete athleteId={params.id} name={athlete.name} isAdmin={isAdmin === true} />
     </div>
   )

@@ -179,3 +179,15 @@ export async function coachClearWorkout(athleteId: string, workoutId: string) {
   revalidatePath(`/coach/athletes/${athleteId}`)
   return fail(e1) ?? fail(e2) ?? { ok: true }
 }
+
+/** Combine a hand-added athlete (no login) with the account that athlete created. Coach of both, or admin. */
+export async function mergeAthleteProfiles(keepId: string, accountId: string) {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('merge_athlete_profiles', { keep_id: keepId, account_id: accountId })
+  if (error) return { error: error.message }
+  revalidatePath('/coach/athletes')
+  revalidatePath(`/coach/athletes/${keepId}`)
+  revalidatePath('/coach/admin')
+  revalidatePath('/coach/dashboard')
+  return { ok: true }
+}
