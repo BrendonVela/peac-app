@@ -188,3 +188,42 @@ export async function sendFormVideo(path: string, type: string, exerciseTitle: s
   revalidatePath('/athlete/messages')
   return { ok: true }
 }
+
+/** Anyone sends a video (any movement — a swing, a throw, a lift) to someone they can message */
+export async function sendVideoMessage(receiverId: string, path: string, type: string, caption: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (!path.startsWith(`${user.id}/`)) return { error: 'Invalid upload' }
+
+  const label = caption.trim() || 'Video'
+  const content = `🎥 ${label}`
+  const { data: row, error } = await supabase
+    .from('messages')
+    .insert({ sender_id: user.id, receiver_id: receiverId, content, attachment_path: path, attachment_type: type })
+    .select('*')
+    .single()
+  if (error) return { error: error.message }
+
+  try {
+    const admin = createAdminClient()
+    if (admin) {
+      const [{ data: senderCoach }, { data: senderAthlete }, { data: receiverAthlete }] = await Promise.all([
+        admin.from('coaches').select('name').eq('user_id', user.id).maybeSingle(),
+        admin.from('athletes').select('name').eq('user_id', user.id).maybeSingle(),
+        admin.from('athletes').select('id').eq('user_id', receiverId).maybeSingle(),
+      ])
+      const name = senderCoach ? `Coach ${senderCoach.name}` : senderAthlete?.name ?? 'PEAC'
+      await sendPushToUsers([receiverId], {
+        title: `${name} sent a video`,
+        body: label,
+        url: receiverAthlete ? '/athlete/messages' : '/coach/messages',
+      })
+    }
+  } catch (e) {
+    console.error('video push failed', e)
+  }
+  revalidatePath('/coach/messages')
+  revalidatePath('/athlete/messages')
+  return { ok: true, message: row }
+}

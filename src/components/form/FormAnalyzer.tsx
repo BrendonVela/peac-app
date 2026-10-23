@@ -1,13 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera } from 'lucide-react'
+import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { saveVideoAnalysis } from '@/app/actions/videoAnalysis'
 import { extractPose, loadPoseEngine } from '@/lib/pose/engine'
 import {
-  analyze, frameAngles, pt, BONES, EXERCISE_LABEL, guessExercise,
-  type AnalysisResult, type Angles, type ExerciseKind, type JointName, type PoseFrame, type View,
+  analyze, frameAngles, pt, BONES, EXERCISE_LABEL, guessExercise, ANGLE_INFO, ANGLE_KEYS, angleLabel, JOINT_NAMES,
+  type AnalysisResult, type Angles, type AngleKey, type ExerciseKind, type JointName, type PoseFrame, type View,
 } from '@/lib/pose/analysis'
 import { cn } from '@/lib/utils'
 
@@ -19,8 +19,8 @@ const TIPS: Record<View, string> = {
   front: 'Front view: phone at hip height straight in front, whole body in frame. Best for knees caving in and left vs right differences.',
 }
 
-/** Joint angles to label on the video for each exercise */
-const LABELS: Record<ExerciseKind, (keyof Angles)[]> = {
+/** Angles turned on at first for each exercise (you can turn any of them on or off) */
+const LABELS: Record<ExerciseKind, AngleKey[]> = {
   squat: ['lKnee', 'rKnee', 'lHip', 'rHip', 'trunk'],
   lunge: ['lKnee', 'rKnee', 'lHip', 'rHip', 'trunk'],
   hinge: ['lHip', 'rHip', 'lKnee', 'rKnee', 'trunk'],
@@ -28,16 +28,18 @@ const LABELS: Record<ExerciseKind, (keyof Angles)[]> = {
   press: ['lElbow', 'rElbow', 'lShoulder', 'rShoulder'],
   pull: ['lElbow', 'rElbow', 'lShoulder', 'rShoulder', 'trunk'],
   sprint: ['lKnee', 'rKnee', 'lHip', 'rHip', 'lShin', 'rShin', 'trunk'],
-  throw: ['lElbow', 'rElbow', 'lShoulder', 'rShoulder', 'lKnee', 'rKnee', 'trunk'],
+  throw: ['lElbow', 'rElbow', 'lShoulder', 'rShoulder', 'lKnee', 'rKnee', 'shTilt'],
+  swing: ['lElbow', 'rElbow', 'lKnee', 'rKnee', 'trunk', 'shTilt', 'hipTilt'],
   other: ['lKnee', 'rKnee', 'lHip', 'rHip', 'lElbow', 'rElbow', 'trunk'],
 }
-const ANGLE_AT: Record<string, JointName> = {
-  lKnee: 'lKnee', rKnee: 'rKnee', lHip: 'lHip', rHip: 'rHip', lElbow: 'lElbow', rElbow: 'rElbow',
-  lShoulder: 'lShoulder', rShoulder: 'rShoulder', lShin: 'lAnkle', rShin: 'rAnkle',
+function defaultShown(ex: ExerciseKind, view: View, side: 'L' | 'R' | undefined): Set<AngleKey> {
+  // Side view: only the side closest to the camera at first (the far side is usually hidden)
+  return new Set(LABELS[ex].filter(k => view === 'front' || !side || ANGLE_INFO[k].side === 'C' || ANGLE_INFO[k].side === side))
 }
-const ANGLE_NAME: Record<string, string> = {
-  lKnee: 'Knee', rKnee: 'Knee', lHip: 'Hip', rHip: 'Hip', lElbow: 'Elbow', rElbow: 'Elbow',
-  lShoulder: 'Shoulder', rShoulder: 'Shoulder', lShin: 'Shin', rShin: 'Shin', trunk: 'Torso lean',
+/** Tapping a body point turns on/off the angle that lives there */
+const JOINT_ANGLE: Partial<Record<JointName, AngleKey>> = {
+  nose: 'trunk', lShoulder: 'lShoulder', rShoulder: 'rShoulder', lElbow: 'lElbow', rElbow: 'rElbow', lWrist: 'lElbow', rWrist: 'rElbow',
+  lHip: 'lHip', rHip: 'rHip', lKnee: 'lKnee', rKnee: 'rKnee', lAnkle: 'lAnkle', rAnkle: 'rAnkle', lHeel: 'lAnkle', rHeel: 'rAnkle', lFoot: 'lAnkle', rFoot: 'rAnkle',
 }
 
 /** Blend the two stored frames around time t so the skeleton moves smoothly */
@@ -82,6 +84,11 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
   const [speed, setSpeed] = useState(1)
   const [time, setTime] = useState(0)
   const [saved, setSaved] = useState(false)
+  const [shown, setShown] = useState<Set<AngleKey>>(() => defaultShown(guessExercise(title), 'side', undefined))
+  const [showBones, setShowBones] = useState(true)
+  const [showPoints, setShowPoints] = useState(true)
+  const [graphKey, setGraphKey] = useState<'auto' | AngleKey>('auto')
+  const [flash, setFlash] = useState('')
   const cancel = useRef({ cancelled: false })
 
   // Saved results from an earlier run?
@@ -113,6 +120,52 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     () => (frames.length ? analyze(frames, exercise, view, aspect, duration || frames[frames.length - 1].t) : null),
     [frames, exercise, view, aspect, duration]
   )
+
+  // New exercise / camera view -> start from that exercise's usual markers
+  const side = analysis?.result.side
+  useEffect(() => { setShown(defaultShown(exercise, view, side)); setGraphKey('auto') }, [exercise, view, side])
+
+  function toggleAngle(k: AngleKey) {
+    setShown(prev => {
+      const n = new Set(prev)
+      if (n.has(k)) n.delete(k); else n.add(k)
+      setFlash(`${angleLabel(k)} ${n.has(k) ? 'on' : 'off'}`)
+      return n
+    })
+  }
+  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(''), 1200); return () => clearTimeout(t) }, [flash])
+
+  /** Where the video sits inside the box (it's letterboxed) */
+  function videoRect() {
+    const video = videoRef.current, box = boxRef.current
+    if (!video || !box) return null
+    const W = box.clientWidth, H = box.clientHeight
+    const va = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : aspect
+    let dw = W, dh = W / va
+    if (dh > H) { dh = H; dw = H * va }
+    return { W, H, dw, dh, ox: (W - dw) / 2, oy: (H - dh) / 2, va }
+  }
+
+  /** Tap a body point to turn its angle on/off; tap anywhere else to play/pause */
+  function onBoxTap(e: React.MouseEvent<HTMLDivElement>) {
+    const r = videoRect(), video = videoRef.current, box = boxRef.current
+    if (!r || !video || !box) return
+    const b = box.getBoundingClientRect()
+    const x = e.clientX - b.left, y = e.clientY - b.top
+    const f = frameAt(frames, video.currentTime)
+    let best: JointName | null = null, bestD = 28
+    if (f && showPoints) {
+      for (const j of JOINT_NAMES) {
+        const p = pt(f, j)
+        if (!p || p.v < 0.35) continue
+        const d = Math.hypot(r.ox + p.x * r.dw - x, r.oy + p.y * r.dh - y)
+        if (d < bestD) { bestD = d; best = j }
+      }
+    }
+    const k = best ? JOINT_ANGLE[best] : undefined
+    if (k) toggleAngle(k)
+    else togglePlay()
+  }
 
   // Save whenever the results change (new run, or a different exercise / view picked)
   useEffect(() => {
@@ -164,10 +217,9 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     const ctx = canvas.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, W, H)
-    const va = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : aspect
-    let dw = W, dh = W / va
-    if (dh > H) { dh = H; dw = H * va }
-    const ox = (W - dw) / 2, oy = (H - dh) / 2
+    const r = videoRect()
+    if (!r) return
+    const { va, dw, dh, ox, oy } = r
     const f = frameAt(frames, video.currentTime)
     if (!f) return
     const P = (j: JointName) => {
@@ -175,7 +227,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
       return p && p.v >= 0.35 ? { x: ox + p.x * dw, y: oy + p.y * dh, v: p.v } : null
     }
     ctx.lineCap = 'round'
-    for (const [a, b, side] of BONES) {
+    for (const [a, b, side] of showBones ? BONES : []) {
       const A = P(a), B = P(b)
       if (!A || !B) continue
       ctx.strokeStyle = COLORS[side]
@@ -184,9 +236,12 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
       ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke()
     }
     ctx.globalAlpha = 1
-    for (const [a, , side] of BONES) {
+    const ringed = new Set<JointName>()
+    for (const k of Array.from(shown)) { const at = ANGLE_INFO[k].at; if (at !== 'midShoulder' && at !== 'midHip') ringed.add(at) }
+    for (const [a, , side] of showPoints ? BONES : []) {
       const A = P(a)
       if (!A) continue
+      if (ringed.has(a)) { ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(A.x, A.y, 9, 0, Math.PI * 2); ctx.stroke() }
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(A.x, A.y, 5, 0, Math.PI * 2); ctx.fill()
       ctx.fillStyle = COLORS[side === 'C' ? (a.startsWith('l') ? 'L' : 'R') : side]
       ctx.beginPath(); ctx.arc(A.x, A.y, 3.2, 0, Math.PI * 2); ctx.fill()
@@ -194,27 +249,31 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     // Angle labels next to the joints
     const ang = frameAngles(f, va)
     ctx.font = '600 12px Inter, system-ui, sans-serif'
-    for (const key of LABELS[exercise]) {
+    for (const key of ANGLE_KEYS) {
+      if (!shown.has(key)) continue
       const val = ang[key]
       if (val == null) continue
-      if (view === 'side' && key !== 'trunk' && analysis && key[0] !== analysis.result.side.toLowerCase()) continue
+      const info = ANGLE_INFO[key]
       let x: number, y: number
-      if (key === 'trunk') {
-        const s = P('lShoulder') ?? P('rShoulder'); if (!s) continue
-        x = s.x + 10; y = s.y - 14
+      if (info.at === 'midShoulder' || info.at === 'midHip') {
+        const a = P(info.at === 'midShoulder' ? 'lShoulder' : 'lHip'), b = P(info.at === 'midShoulder' ? 'rShoulder' : 'rHip')
+        const m = a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a ?? b
+        if (!m) continue
+        x = m.x; y = m.y + (key === 'trunk' ? -22 : key === 'shTilt' ? -40 : 28)
       } else {
-        const j = P(ANGLE_AT[key]); if (!j) continue
-        x = j.x + (key[0] === 'l' ? 10 : -10); y = j.y - 8
+        const j = P(info.at); if (!j) continue
+        x = j.x + (info.side === 'L' ? 12 : -12); y = j.y + (key === 'lShin' || key === 'rShin' ? 18 : key === 'lAnkle' || key === 'rAnkle' ? 20 : -8)
       }
-      const text = `${ANGLE_NAME[key]} ${Math.round(val)}°`
+      const text = `${info.name} ${Math.round(val)}°`
       const w = ctx.measureText(text).width + 10
-      const left = key[0] === 'r' && key !== 'trunk' ? x - w : x
+      const left = info.side === 'C' ? x - w / 2 : info.side === 'R' ? x - w : x
       ctx.fillStyle = 'rgba(0,0,0,0.7)'
       ctx.fillRect(left, y - 13, w, 18)
-      ctx.fillStyle = key === 'trunk' ? '#e4e4e7' : COLORS[key[0] === 'l' ? 'L' : 'R']
+      ctx.fillStyle = info.side === 'C' ? '#e4e4e7' : COLORS[info.side]
       ctx.fillText(text, left + 5, y)
     }
-  }, [frames, aspect, exercise, view, analysis])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frames, aspect, shown, showBones, showPoints])
 
   useEffect(() => {
     if (phase !== 'ready') return
@@ -265,7 +324,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
         {/* Exercise + view pickers (always available — changing them re-checks instantly) */}
         {phase !== 'checking' && (
           <div className="space-y-2">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex flex-wrap gap-2">
               {(Object.keys(EXERCISE_LABEL) as ExerciseKind[]).map(k => (
                 <button key={k} onClick={() => setExercise(k)} disabled={phase === 'analyzing'}
                   className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium', exercise === k ? 'border-blue-500 bg-blue-600/20 text-white' : 'border-zinc-700 text-zinc-400')}>
@@ -315,7 +374,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
 
         {phase === 'ready' && (
           <>
-            <div ref={boxRef} className="relative w-full h-[55vh] rounded-xl bg-black overflow-hidden">
+            <div ref={boxRef} onClick={onBoxTap} className="relative w-full h-[55vh] rounded-xl bg-black overflow-hidden cursor-pointer select-none">
               <video
                 ref={videoRef}
                 src={src}
@@ -326,13 +385,14 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
                 className="absolute inset-0 w-full h-full object-contain"
                 onLoadedMetadata={e => { setDuration(e.currentTarget.duration); if (e.currentTarget.videoWidth) setAspect(e.currentTarget.videoWidth / e.currentTarget.videoHeight) }}
                 onEnded={() => setPlaying(false)}
-                onClick={togglePlay}
               />
               <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
               <div className="absolute left-2 top-2 flex gap-2 text-[10px] font-semibold">
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.L }}>● Left</span>
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.R }}>● Right</span>
               </div>
+              {flash && <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">{flash}</div>}
+              <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point to show/hide its angle</p>
             </div>
 
             {/* Controls */}
@@ -359,7 +419,37 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
               </div>
             </div>
 
-            {analysis && <AngleGraph frames={frames} angles={analysis.angles} primary={analysis.primary} result={analysis.result} time={time} onSeek={goTo} />}
+            {/* Markers: turn anything on or off */}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                <SlidersHorizontal className="w-4 h-4 text-blue-400" /> Markers
+                <div className="ml-auto flex gap-1.5">
+                  <Toggle on={showBones} onClick={() => setShowBones(b => !b)}>Skeleton</Toggle>
+                  <Toggle on={showPoints} onClick={() => setShowPoints(b => !b)}>Points</Toggle>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {ANGLE_KEYS.map(k => (
+                  <Toggle key={k} on={shown.has(k)} onClick={() => toggleAngle(k)} color={ANGLE_INFO[k].side === 'C' ? '#e4e4e7' : COLORS[ANGLE_INFO[k].side]}>
+                    {angleLabel(k)}
+                  </Toggle>
+                ))}
+              </div>
+              <div className="flex gap-3 text-[11px]">
+                <button onClick={() => setShown(new Set(ANGLE_KEYS))} className="text-zinc-400 underline">Show all</button>
+                <button onClick={() => setShown(new Set())} className="text-zinc-400 underline">Hide all</button>
+                <button onClick={() => setShown(defaultShown(exercise, view, side))} className="text-zinc-400 underline">Reset</button>
+              </div>
+            </div>
+
+            {analysis && (
+              <AngleGraph
+                frames={frames} angles={analysis.angles} primary={analysis.primary} result={analysis.result} time={time} onSeek={goTo}
+                graphKey={graphKey} setGraphKey={setGraphKey}
+              />
+            )}
+
+            {analysis && shown.size > 0 && <AngleSummary frames={frames} angles={analysis.angles} keys={ANGLE_KEYS.filter(k => shown.has(k))} onSeek={goTo} />}
 
             {result && (
               <div className="space-y-3">
@@ -426,13 +516,15 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
 }
 
 /** Primary angle over time with rep bands; tap to jump the video */
-function AngleGraph({ frames, angles, primary, result, time, onSeek }: {
+function AngleGraph({ frames, angles, primary, result, time, onSeek, graphKey, setGraphKey }: {
   frames: PoseFrame[]; angles: Angles[]; primary: (number | null)[]; result: AnalysisResult; time: number; onSeek: (t: number) => void
+  graphKey: 'auto' | AngleKey; setGraphKey: (k: 'auto' | AngleKey) => void
 }) {
   const W = 600, H = 140, pad = 24
   const t0 = frames[0]?.t ?? 0, t1 = frames[frames.length - 1]?.t ?? 1
   const trunk = angles.map(a => a.trunk)
-  const series = result.primary.key === 'none' ? angles.map(a => a.lKnee ?? a.rKnee) : primary
+  const series = graphKey !== 'auto' ? angles.map(a => a[graphKey]) : result.primary.key === 'none' ? angles.map(a => a.lKnee ?? a.rKnee) : primary
+  const seriesName = graphKey !== 'auto' ? angleLabel(graphKey) : result.primary.key === 'none' ? 'Knee angle' : result.primary.label
   const vals = [...series, ...trunk].filter((v): v is number => v != null)
   if (vals.length < 2) return null
   const lo = Math.max(0, Math.min(...vals) - 10), hi = Math.min(200, Math.max(...vals) + 10)
@@ -450,7 +542,15 @@ function AngleGraph({ frames, angles, primary, result, time, onSeek }: {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-2">
       <div className="flex items-center gap-3 px-1 pb-1 text-[11px]">
-        <span className="text-blue-300">— {result.primary.key === 'none' ? 'Knee angle' : result.primary.label}</span>
+        <select
+          value={graphKey}
+          onChange={e => setGraphKey(e.target.value as 'auto' | AngleKey)}
+          className="rounded bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-blue-300 text-[11px]"
+          aria-label="Angle to graph"
+        >
+          <option value="auto">— {graphKey === 'auto' ? seriesName : result.primary.key === 'none' ? 'Knee angle' : result.primary.label}</option>
+          {ANGLE_KEYS.map(k => <option key={k} value={k}>— {angleLabel(k)}</option>)}
+        </select>
         <span className="text-zinc-400">— Torso lean</span>
         <span className="ml-auto text-zinc-500">Tap to jump</span>
       </div>
@@ -479,6 +579,59 @@ function AngleGraph({ frames, angles, primary, result, time, onSeek }: {
         ))}
         <line x1={X(time)} x2={X(time)} y1={pad / 2} y2={H - pad} stroke="#fbbf24" strokeWidth="1.5" />
       </svg>
+    </div>
+  )
+}
+
+function Toggle({ on, onClick, color, children }: { on: boolean; onClick: () => void; color?: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn('rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+        on ? 'border-zinc-500 bg-zinc-700 text-white' : 'border-zinc-800 text-zinc-500')}
+    >
+      {color && <span className="mr-1" style={{ color: on ? color : undefined }}>●</span>}
+      {children}
+    </button>
+  )
+}
+
+/** Lowest and highest value of each shown angle, tap to jump to that moment */
+function AngleSummary({ frames, angles, keys, onSeek }: { frames: PoseFrame[]; angles: Angles[]; keys: AngleKey[]; onSeek: (t: number) => void }) {
+  const rows = keys.map(k => {
+    let lo: { v: number; t: number } | null = null, hi: { v: number; t: number } | null = null
+    angles.forEach((a, i) => {
+      const v = a[k]
+      if (v == null) return
+      if (!lo || v < lo.v) lo = { v, t: frames[i].t }
+      if (!hi || v > hi.v) hi = { v, t: frames[i].t }
+    })
+    return { k, lo: lo as { v: number; t: number } | null, hi: hi as { v: number; t: number } | null }
+  }).filter(r => r.lo && r.hi)
+  if (!rows.length) return null
+  const Cell = ({ x }: { x: { v: number; t: number } }) => (
+    <button onClick={() => onSeek(x.t)} className="tabular-nums text-white hover:text-blue-300">
+      {Math.round(x.v)}° <span className="text-[10px] text-zinc-500">@{x.t.toFixed(2)}s</span>
+    </button>
+  )
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-800">
+      <table className="w-full text-sm">
+        <thead className="text-[11px] uppercase tracking-wide text-zinc-500 bg-zinc-900">
+          <tr><th className="px-3 py-2 text-left">Angle</th><th className="px-3 py-2 text-right">Lowest</th><th className="px-3 py-2 text-right">Highest</th><th className="px-3 py-2 text-right">Range</th></tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-800">
+          {rows.map(({ k, lo, hi }) => (
+            <tr key={k}>
+              <td className="px-3 py-2 whitespace-nowrap" style={{ color: ANGLE_INFO[k].side === 'C' ? '#e4e4e7' : COLORS[ANGLE_INFO[k].side] }}>{angleLabel(k)}</td>
+              <td className="px-3 py-2 text-right"><Cell x={lo!} /></td>
+              <td className="px-3 py-2 text-right"><Cell x={hi!} /></td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-300">{Math.round(hi!.v - lo!.v)}°</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-3 py-2 text-[11px] text-zinc-500 border-t border-zinc-800">Tap a number to jump to that moment in the video.</p>
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { sendMessage, markMessagesRead } from '@/app/actions/messages'
 import { MessageAttachment } from '@/components/MessageAttachment'
+import { VideoSendButton } from '@/components/VideoSendButton'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types'
 
@@ -165,8 +166,9 @@ export default function AthleteMessagesPage() {
               <div ref={bottomRef} />
             </div>
 
-            <div className="px-4 py-3 border-t border-zinc-800 shrink-0">
+            <div className="relative px-4 py-3 border-t border-zinc-800 shrink-0">
               <form onSubmit={handleSend} className="flex gap-2">
+                  <VideoSendButton<Message> receiverId={selected.userId} onSent={m => setMessages(prev => [...prev, m])} />
                 <input
                   value={text}
                   onChange={e => setText(e.target.value)}

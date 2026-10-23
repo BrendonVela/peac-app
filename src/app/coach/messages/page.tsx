@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { sendMessage, markMessagesRead, broadcastMessage, adminDeleteMessage, adminDeleteConversation, type BroadcastAudience } from '@/app/actions/messages'
 import { Modal } from '@/components/ui/Modal'
 import { MessageAttachment } from '@/components/MessageAttachment'
+import { VideoSendButton } from '@/components/VideoSendButton'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types'
 
@@ -345,8 +346,12 @@ export default function CoachMessagesPage() {
                 <div ref={bottomRef} />
               </div>
 
-              <div className="px-4 py-3 border-t border-zinc-800 shrink-0">
+              <div className="relative px-4 py-3 border-t border-zinc-800 shrink-0">
                 <form onSubmit={handleSend} className="flex gap-2">
+                  <VideoSendButton<Message> receiverId={selected.userId} onSent={m => {
+                    setMessages(prev => [...prev, m])
+                    setThreads(prev => prev.map(t => (t.userId === selected.userId ? { ...t, lastMessage: m.content, lastAt: m.created_at } : t)))
+                  }} />
                   <input
                     value={text}
                     onChange={e => setText(e.target.value)}

@@ -1,7 +1,7 @@
 // Form analysis from body points found in a video (MediaPipe Pose, 33 points, normalized 0..1).
 // Everything here is plain math so it runs the same on any phone or computer.
 
-export type ExerciseKind = 'squat' | 'hinge' | 'lunge' | 'press' | 'pull' | 'jump' | 'sprint' | 'throw' | 'other'
+export type ExerciseKind = 'squat' | 'hinge' | 'lunge' | 'press' | 'pull' | 'jump' | 'sprint' | 'throw' | 'swing' | 'other'
 export type View = 'side' | 'front'
 
 export const EXERCISE_LABEL: Record<ExerciseKind, string> = {
@@ -12,8 +12,9 @@ export const EXERCISE_LABEL: Record<ExerciseKind, string> = {
   pull: 'Row / Pull-up',
   jump: 'Jump / Landing',
   sprint: 'Sprint start',
-  throw: 'Throwing',
-  other: 'Other',
+  throw: 'Throw / Pitch',
+  swing: 'Swing (bat / golf)',
+  other: 'Any movement',
 }
 
 /** Joints we keep (MediaPipe index -> short name) */
@@ -41,7 +42,26 @@ export interface Angles {
   lShoulder: number | null; rShoulder: number | null
   trunk: number | null        // forward lean from vertical, degrees
   lShin: number | null; rShin: number | null // shin lean from vertical
+  lAnkle: number | null; rAnkle: number | null // knee-ankle-toe angle
+  shTilt: number | null       // shoulder line vs level (degrees)
+  hipTilt: number | null      // hip line vs level (degrees)
 }
+
+export type AngleKey = keyof Angles
+/** Every angle the app can show: name, which side's color, and which body point it sits next to */
+export const ANGLE_INFO: Record<AngleKey, { name: string; side: 'L' | 'R' | 'C'; at: JointName | 'midShoulder' | 'midHip' }> = {
+  lShoulder: { name: 'Shoulder', side: 'L', at: 'lShoulder' }, rShoulder: { name: 'Shoulder', side: 'R', at: 'rShoulder' },
+  lElbow: { name: 'Elbow', side: 'L', at: 'lElbow' }, rElbow: { name: 'Elbow', side: 'R', at: 'rElbow' },
+  lHip: { name: 'Hip', side: 'L', at: 'lHip' }, rHip: { name: 'Hip', side: 'R', at: 'rHip' },
+  lKnee: { name: 'Knee', side: 'L', at: 'lKnee' }, rKnee: { name: 'Knee', side: 'R', at: 'rKnee' },
+  lAnkle: { name: 'Ankle', side: 'L', at: 'lAnkle' }, rAnkle: { name: 'Ankle', side: 'R', at: 'rAnkle' },
+  lShin: { name: 'Shin lean', side: 'L', at: 'lKnee' }, rShin: { name: 'Shin lean', side: 'R', at: 'rKnee' },
+  trunk: { name: 'Torso lean', side: 'C', at: 'midShoulder' },
+  shTilt: { name: 'Shoulder tilt', side: 'C', at: 'midShoulder' },
+  hipTilt: { name: 'Hip tilt', side: 'C', at: 'midHip' },
+}
+export const ANGLE_KEYS = Object.keys(ANGLE_INFO) as AngleKey[]
+export const angleLabel = (k: AngleKey) => (ANGLE_INFO[k].side === 'C' ? ANGLE_INFO[k].name : `${ANGLE_INFO[k].side === 'L' ? 'Left' : 'Right'} ${ANGLE_INFO[k].name.toLowerCase()}`)
 
 export interface Rep {
   n: number
@@ -93,6 +113,14 @@ function fromVertical(top: { x: number; y: number } | null, bottom: { x: number;
   return Math.abs((Math.atan2(dx, dy) * 180) / Math.PI)
 }
 
+/** How far the line a-b is from level (0 = perfectly level) */
+function fromLevel(a: { x: number; y: number } | null, b: { x: number; y: number } | null, aspect: number): number | null {
+  if (!a || !b) return null
+  const dx = Math.abs((a.x - b.x) * aspect), dy = Math.abs(a.y - b.y)
+  if (dx < 0.01 && dy < 0.01) return null
+  return (Math.atan2(dy, dx) * 180) / Math.PI
+}
+
 const vis = <T extends { v: number }>(p: T | null): T | null => (p && p.v >= MIN_VIS ? p : null)
 const mid = (a: { x: number; y: number } | null, b: { x: number; y: number } | null) => (a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a ?? b)
 
@@ -110,6 +138,10 @@ export function frameAngles(f: PoseFrame, aspect: number): Angles {
     trunk: fromVertical(mid(g('lShoulder'), g('rShoulder')), mid(g('lHip'), g('rHip')), aspect),
     lShin: fromVertical(g('lKnee'), g('lAnkle'), aspect),
     rShin: fromVertical(g('rKnee'), g('rAnkle'), aspect),
+    lAnkle: angle3(g('lKnee'), g('lAnkle'), g('lFoot'), aspect),
+    rAnkle: angle3(g('rKnee'), g('rAnkle'), g('rFoot'), aspect),
+    shTilt: fromLevel(g('lShoulder'), g('rShoulder'), aspect),
+    hipTilt: fromLevel(g('lHip'), g('rHip'), aspect),
   }
 }
 
@@ -134,6 +166,7 @@ const PRIMARY: Record<ExerciseKind, { joint: 'Knee' | 'Hip' | 'Elbow' | null; la
   jump: { joint: 'Knee', label: 'Knee angle' },
   sprint: { joint: null, label: 'Angles only' },
   throw: { joint: null, label: 'Angles only' },
+  swing: { joint: null, label: 'Angles only' },
   other: { joint: null, label: 'Angles only' },
 }
 
@@ -283,7 +316,7 @@ export function analyze(frames: PoseFrame[], exercise: ExerciseKind, view: View,
     const maxLean = Math.max(...reps.map(r => r.trunk ?? 0))
     if (maxLean >= 50) checks.push({ level: 'info', text: `Torso leaned forward up to ${maxLean}° at the bottom.` })
   }
-  if (!PRIMARY[exercise].joint) checks.push({ level: 'info', text: 'Rep counting is for lifts. Use the angles and slow motion to review this movement.' })
+  if (!PRIMARY[exercise].joint) checks.push({ level: 'info', text: 'Rep counting is for lifts. Use slow motion, the markers and the angle list below to review this movement.' })
 
   return {
     result: {
@@ -301,7 +334,9 @@ export function guessExercise(text: string): ExerciseKind {
   const t = text.toLowerCase()
   if (/lunge|split squat|rfess|bulgarian|step.?up/.test(t)) return 'lunge'
   if (/squat|goblet/.test(t)) return 'squat'
-  if (/deadlift|rdl|hinge|good morning|hip thrust|swing|clean pull/.test(t)) return 'hinge'
+  if (/(kettlebell|kb|russian|american) swing/.test(t)) return 'hinge'
+  if (/swing|batting|hitting|\bbat\b|golf|tee work|\bhit\b/.test(t)) return 'swing'
+  if (/deadlift|rdl|hinge|good morning|hip thrust|clean pull/.test(t)) return 'hinge'
   if (/bench|press|push.?up|dip/.test(t)) return 'press'
   if (/row|pull.?up|chin.?up|pulldown/.test(t)) return 'pull'
   if (/jump|hop|bound|depth drop|landing/.test(t)) return 'jump'
