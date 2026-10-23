@@ -123,7 +123,10 @@ export async function adminDeleteMessage(messageId: string) {
   if ('error' in ctx) return { error: ctx.error }
   const { data: row } = await ctx.admin.from('messages').select('attachment_path').eq('id', messageId).maybeSingle()
   const { error } = await ctx.admin.from('messages').delete().eq('id', messageId)
-  if (!error && row?.attachment_path) {
+  const { count: stillUsed } = row?.attachment_path
+    ? await ctx.admin.from('messages').select('id', { count: 'exact', head: true }).eq('attachment_path', row.attachment_path)
+    : { count: 0 }
+  if (!error && row?.attachment_path && !stillUsed) {
     await ctx.admin.storage.from('form-videos').remove([row.attachment_path])
     await ctx.admin.from('video_analyses').delete().eq('video_path', row.attachment_path)
   }

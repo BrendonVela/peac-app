@@ -155,7 +155,7 @@ export default function AthleteMessagesPage() {
                       )}
                     >
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                        {msg.attachment_path && <MessageAttachment path={msg.attachment_path} type={msg.attachment_type} title={msg.content} />}
+                        {msg.attachment_path && <MessageAttachment path={msg.attachment_path} type={msg.attachment_type} title={msg.content} onSent={m => setMessages(prev => [...prev, m])} />}
                       <p className={cn('text-[10px] mt-1', isMe ? 'text-blue-200' : 'text-zinc-500')}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>

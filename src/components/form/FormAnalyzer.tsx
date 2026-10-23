@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal } from 'lucide-react'
+import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { saveVideoAnalysis } from '@/app/actions/videoAnalysis'
+import { saveVideoAnalysis, saveVideoNotes, sendVideoReview } from '@/app/actions/videoAnalysis'
+import { drawStroke, notesAt, PEN_COLORS, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
+import type { Message } from '@/types'
 import { extractPose, loadPoseEngine } from '@/lib/pose/engine'
 import {
   analyze, frameAngles, pt, BONES, EXERCISE_LABEL, guessExercise, ANGLE_INFO, ANGLE_KEYS, angleLabel, JOINT_NAMES,
@@ -61,12 +63,13 @@ function frameAt(frames: PoseFrame[], t: number): PoseFrame | null {
   }
 }
 
-export function FormAnalyzer({ src, path, title, canSave, onClose }: {
+export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   src: string
   path: string
   title: string
   canSave: boolean
   onClose: () => void
+  onSent?: (m: Message) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -89,6 +92,26 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
   const [showPoints, setShowPoints] = useState(true)
   const [graphKey, setGraphKey] = useState<'auto' | AngleKey>('auto')
   const [flash, setFlash] = useState('')
+  // Drawings + notes
+  const [notes, setNotes] = useState<VideoNote[]>([])
+  const notesRef = useRef<VideoNote[]>([])
+  notesRef.current = notes
+  const [drawMode, setDrawMode] = useState(false)
+  const drawModeRef = useRef(false)
+  drawModeRef.current = drawMode
+  const [tool, setTool] = useState<Tool>('pen')
+  const [color, setColor] = useState(PEN_COLORS[0])
+  const draft = useRef<Stroke[]>([])
+  const inProgress = useRef<Stroke | null>(null)
+  const [draftVer, setDraftVer] = useState(0)
+  const [noteText, setNoteText] = useState('')
+  const [pauseAtNotes, setPauseAtNotes] = useState(true)
+  const pauseRef = useRef(true)
+  pauseRef.current = pauseAtNotes
+  const [notesMsg, setNotesMsg] = useState('')
+  const [comment, setComment] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sentOk, setSentOk] = useState(false)
   const cancel = useRef({ cancelled: false })
 
   // Saved results from an earlier run?
@@ -96,11 +119,13 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     let alive = true
     createClient()
       .from('video_analyses')
-      .select('exercise, view, result, frames')
+      .select('exercise, view, result, frames, annotations')
       .eq('video_path', path)
       .maybeSingle()
       .then(({ data }) => {
         if (!alive) return
+        const saved = (data?.annotations as VideoNote[] | null) ?? []
+        if (saved.length) setNotes(saved)
         if (data?.frames?.length) {
           setExercise(data.exercise as ExerciseKind)
           setView(data.view as View)
@@ -108,6 +133,8 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
           if ((data.result as AnalysisResult)?.aspect) setAspect((data.result as AnalysisResult).aspect)
           setSaved(true)
           setPhase('ready')
+        } else if (saved.length) {
+          setPhase('ready') // drawings/notes without body tracking
         } else {
           setPhase('setup')
           loadPoseEngine().catch(() => {}) // warm up while they pick options
@@ -148,6 +175,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
 
   /** Tap a body point to turn its angle on/off; tap anywhere else to play/pause */
   function onBoxTap(e: React.MouseEvent<HTMLDivElement>) {
+    if (drawModeRef.current) return
     const r = videoRect(), video = videoRef.current, box = boxRef.current
     if (!r || !video || !box) return
     const b = box.getBoundingClientRect()
@@ -221,7 +249,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     if (!r) return
     const { va, dw, dh, ox, oy } = r
     const f = frameAt(frames, video.currentTime)
-    if (!f) return
+    if (f) {
     const P = (j: JointName) => {
       const p = pt(f, j)
       return p && p.v >= 0.35 ? { x: ox + p.x * dw, y: oy + p.y * dh, v: p.v } : null
@@ -272,6 +300,12 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
       ctx.fillStyle = info.side === 'C' ? '#e4e4e7' : COLORS[info.side]
       ctx.fillText(text, left + 5, y)
     }
+    }
+    // Coach drawings: the draft while drawing, otherwise the notes at this moment
+    const strokes = drawModeRef.current
+      ? [...draft.current, ...(inProgress.current ? [inProgress.current] : [])]
+      : notesAt(notesRef.current, video.currentTime).flatMap(n => n.strokes)
+    for (const s of strokes) drawStroke(ctx, s, r)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frames, aspect, shown, showBones, showPoints])
 
@@ -279,15 +313,93 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
     if (phase !== 'ready') return
     let raf = 0
     let last = -1
+    let prev = -1
     const loop = () => {
       draw()
-      const ct = videoRef.current?.currentTime ?? 0
+      const el = videoRef.current
+      const ct = el?.currentTime ?? 0
+      // Stop on each note so it can be read
+      if (el && !el.paused && pauseRef.current && prev >= 0 && ct > prev) {
+        const hit = notesRef.current.find(n => n.t > prev && n.t <= ct)
+        if (hit) { el.pause(); el.currentTime = hit.t; setPlaying(false) }
+      }
+      prev = el?.currentTime ?? ct
       if (Math.abs(ct - last) > 0.03) { last = ct; setTime(ct) }
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
   }, [phase, draw])
+
+  // ---------- Drawing + notes ----------
+  function toNorm(e: React.PointerEvent): [number, number] | null {
+    const r = videoRect(), box = boxRef.current
+    if (!r || !box) return null
+    const b = box.getBoundingClientRect()
+    return [(e.clientX - b.left - r.ox) / r.dw, (e.clientY - b.top - r.oy) / r.dh]
+  }
+  function penDown(e: React.PointerEvent) {
+    e.preventDefault()
+    const p = toNorm(e); if (!p) return
+    if (tool === 'angle') {
+      const cur = inProgress.current
+      if (cur && cur.tool === 'angle' && cur.pts.length < 3) cur.pts.push(p)
+      else inProgress.current = { tool: 'angle', color, pts: [p] }
+      if (inProgress.current!.pts.length === 3) { draft.current.push(inProgress.current!); inProgress.current = null }
+      setDraftVer(v => v + 1)
+      return
+    }
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    inProgress.current = { tool, color, pts: [p] }
+  }
+  function penMove(e: React.PointerEvent) {
+    const cur = inProgress.current
+    if (!cur || cur.tool === 'angle') return
+    const p = toNorm(e); if (!p) return
+    if (cur.tool === 'pen') cur.pts.push(p)
+    else cur.pts = [cur.pts[0], p]
+  }
+  function penUp() {
+    const cur = inProgress.current
+    if (!cur || cur.tool === 'angle') return
+    if (cur.tool === 'pen' || cur.pts.length >= 2) draft.current.push(cur)
+    inProgress.current = null
+    setDraftVer(v => v + 1)
+  }
+  function startDrawing() {
+    videoRef.current?.pause(); setPlaying(false)
+    draft.current = []; inProgress.current = null; setNoteText(''); setDrawMode(true); setDraftVer(v => v + 1)
+  }
+  function undo() {
+    if (inProgress.current) inProgress.current = null
+    else draft.current.pop()
+    setDraftVer(v => v + 1)
+  }
+  async function persistNotes(next: VideoNote[]) {
+    setNotes(next)
+    setSentOk(false)
+    if (!canSave) return
+    setNotesMsg('Saving…')
+    const r = await saveVideoNotes(path, next)
+    setNotesMsg(r && 'error' in r && r.error ? `Not saved: ${r.error}` : '✓ Saved')
+  }
+  function saveNote() {
+    const strokes = draft.current.slice()
+    if (!strokes.length && !noteText.trim()) { setDrawMode(false); return }
+    const t = +(videoRef.current?.currentTime ?? 0).toFixed(3)
+    const note: VideoNote = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, t, text: noteText.trim(), strokes }
+    persistNotes([...notes, note].sort((a, b) => a.t - b.t))
+    draft.current = []; inProgress.current = null; setNoteText(''); setDrawMode(false)
+  }
+  async function sendReview() {
+    setSending(true)
+    const r = await sendVideoReview(path, notes.length, comment)
+    setSending(false)
+    if (!r || 'error' in r) { setNotesMsg((r && 'error' in r && r.error) || 'Could not send.'); return }
+    setSentOk(true); setComment('')
+    if (r.message) onSent?.(r.message as Message)
+  }
+  const showingNotes = drawMode ? [] : notesAt(notes, time)
 
   // ---------- Player controls ----------
   const v = () => videoRef.current
@@ -357,6 +469,9 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
             <button onClick={run} className="w-full rounded-xl bg-blue-600 py-3.5 text-base font-semibold text-white">
               🦴 Analyze form
             </button>
+            <button onClick={() => setPhase('ready')} className="w-full rounded-xl border border-zinc-700 py-3 text-sm font-medium text-zinc-200">
+              ✏️ Just draw &amp; add notes (skip body tracking)
+            </button>
             <p className="text-center text-[11px] text-zinc-500">Runs on this device — the video isn&apos;t sent anywhere. Older phones can take a minute.</p>
           </div>
         )}
@@ -392,7 +507,26 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.R }}>● Right</span>
               </div>
               {flash && <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">{flash}</div>}
-              <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point to show/hide its angle</p>
+              {!drawMode && frames.length > 0 && showingNotes.length === 0 && <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point to show/hide its angle</p>}
+              {showingNotes.some(n => n.text) && (
+                <div className="absolute inset-x-2 bottom-2 space-y-1">
+                  {showingNotes.filter(n => n.text).map(n => (
+                    <p key={n.id} className="rounded-lg bg-black/80 px-3 py-2 text-sm text-white shadow-lg border-l-4 border-yellow-400 whitespace-pre-wrap">{n.text}</p>
+                  ))}
+                </div>
+              )}
+              {drawMode && (
+                <div
+                  className="absolute inset-0 cursor-crosshair"
+                  style={{ touchAction: 'none' }}
+                  onClick={e => e.stopPropagation()}
+                  onPointerDown={penDown}
+                  onPointerMove={penMove}
+                  onPointerUp={penUp}
+                  onPointerCancel={penUp}
+                />
+              )}
+              {drawMode && <div className="absolute right-2 top-2 rounded bg-yellow-400 px-2 py-0.5 text-[10px] font-bold text-black">DRAWING · {time.toFixed(2)}s</div>}
             </div>
 
             {/* Controls */}
@@ -419,8 +553,92 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
               </div>
             </div>
 
+            {/* Draw + notes */}
+            {drawMode ? (
+              <div className="rounded-xl border border-yellow-500/40 bg-zinc-900 p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {([['pen', Pencil, 'Draw'], ['line', Minus, 'Line'], ['arrow', ArrowUpRight, 'Arrow'], ['circle', Circle, 'Circle'], ['angle', Triangle, 'Angle']] as const).map(([k, Icon, label]) => (
+                    <button key={k} onClick={() => { setTool(k); inProgress.current = null }}
+                      className={cn('flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium', tool === k ? 'border-yellow-400 bg-yellow-400/15 text-white' : 'border-zinc-700 text-zinc-400')}>
+                      <Icon className="w-3.5 h-3.5" /> {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  {PEN_COLORS.map(c => (
+                    <button key={c} onClick={() => setColor(c)} aria-label="Pen color"
+                      className={cn('w-7 h-7 rounded-full border-2', color === c ? 'border-white scale-110' : 'border-zinc-700')} style={{ background: c }} />
+                  ))}
+                  <button onClick={undo} className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300"><Undo2 className="w-3.5 h-3.5" /> Undo</button>
+                  <button onClick={() => { draft.current = []; inProgress.current = null; setDraftVer(v => v + 1) }} className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300">Clear</button>
+                </div>
+                {tool === 'angle' && <p className="text-[11px] text-zinc-400">Angle: tap 3 spots — one end, the corner, the other end.</p>}
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  rows={2}
+                  placeholder={`Note at ${time.toFixed(2)}s — e.g. "Keep your back elbow up here"`}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                />
+                <div className="flex gap-2">
+                  <button onClick={saveNote} className="flex-1 rounded-lg bg-yellow-400 py-2.5 text-sm font-bold text-black">Save note at {time.toFixed(2)}s</button>
+                  <button onClick={() => { draft.current = []; inProgress.current = null; setDrawMode(false) }} className="rounded-lg border border-zinc-700 px-4 text-sm text-zinc-300">Cancel</button>
+                </div>
+                <p className="text-[10px] text-zinc-500">Tip: use ‹ › to move to the exact frame first. {draftVer > 0 && draft.current.length ? `${draft.current.length} drawing${draft.current.length === 1 ? '' : 's'}` : ''}</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <MessageSquareText className="w-4 h-4 text-yellow-400" />
+                  <span className="text-xs font-semibold text-zinc-300">Notes &amp; drawings</span>
+                  <label className="ml-auto flex items-center gap-1.5 text-[11px] text-zinc-400">
+                    <input type="checkbox" checked={pauseAtNotes} onChange={e => setPauseAtNotes(e.target.checked)} /> Pause at notes
+                  </label>
+                </div>
+                {canSave && (
+                  <button onClick={startDrawing} className="w-full flex items-center justify-center gap-2 rounded-lg bg-yellow-400 py-2.5 text-sm font-bold text-black">
+                    <Pencil className="w-4 h-4" /> Draw / add note at {time.toFixed(2)}s
+                  </button>
+                )}
+                {notes.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500">Pause where you want to coach something, then tap Draw. The note pops up at that moment when the video plays.</p>
+                ) : (
+                  <ul className="divide-y divide-zinc-800">
+                    {notes.map(n => (
+                      <li key={n.id} className="flex items-start gap-2 py-2">
+                        <button onClick={() => { videoRef.current?.pause(); setPlaying(false); goTo(n.t) }} className="shrink-0 rounded bg-zinc-800 px-2 py-1 text-xs tabular-nums text-yellow-300">{n.t.toFixed(2)}s</button>
+                        <p className="flex-1 text-sm text-zinc-200 whitespace-pre-wrap">
+                          {n.text || <span className="text-zinc-500">(drawing)</span>}
+                          {n.strokes.length > 0 && n.text && <span className="ml-1 text-[11px] text-zinc-500">✏️</span>}
+                        </p>
+                        {canSave && <button onClick={() => persistNotes(notes.filter(x => x.id !== n.id))} className="p-1 text-zinc-500 hover:text-red-400" aria-label="Delete note"><Trash2 className="w-4 h-4" /></button>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {notes.length > 0 && canSave && (
+                  <div className="space-y-2 border-t border-zinc-800 pt-2.5">
+                    <input
+                      value={comment}
+                      onChange={e => setComment(e.target.value)}
+                      placeholder="Message with it (optional)"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button onClick={sendReview} disabled={sending} className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                      <Send className="w-4 h-4" /> {sending ? 'Sending…' : sentOk ? 'Sent ✓ — send again' : 'Send review back'}
+                    </button>
+                  </div>
+                )}
+                {notesMsg && <p className="text-[11px] text-zinc-500">{notesMsg}</p>}
+              </div>
+            )}
+
+            {frames.length === 0 && (
+              <button onClick={run} className="w-full rounded-xl border border-zinc-700 py-2.5 text-sm text-zinc-200">🦴 Add body tracking (skeleton + angles)</button>
+            )}
+
             {/* Markers: turn anything on or off */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2">
+            {frames.length > 0 && <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
                 <SlidersHorizontal className="w-4 h-4 text-blue-400" /> Markers
                 <div className="ml-auto flex gap-1.5">
@@ -440,7 +658,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose }: {
                 <button onClick={() => setShown(new Set())} className="text-zinc-400 underline">Hide all</button>
                 <button onClick={() => setShown(defaultShown(exercise, view, side))} className="text-zinc-400 underline">Reset</button>
               </div>
-            </div>
+            </div>}
 
             {analysis && (
               <AngleGraph

@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
+import type { Message } from '@/types'
 
 const FormAnalyzer = dynamic(() => import('./form/FormAnalyzer').then(m => m.FormAnalyzer), { ssr: false })
 
 /** Plays a form-check video stored in Supabase Storage (private link that expires after an hour) */
-export function MessageAttachment({ path, type, title = '' }: { path: string; type?: string | null; title?: string }) {
+export function MessageAttachment({ path, type, title = '', onSent }: { path: string; type?: string | null; title?: string; onSent?: (m: Message) => void }) {
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
@@ -42,9 +43,9 @@ export function MessageAttachment({ path, type, title = '' }: { path: string; ty
         onClick={e => { e.stopPropagation(); setAnalyzing(true) }}
         className="inline-flex items-center gap-1.5 rounded-lg bg-black/40 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black/60"
       >
-        🦴 Analyze form
+        {title.startsWith('📝') ? '▶️ Watch review' : '🦴 Analyze form'}
       </button>
-      {analyzing && <FormAnalyzer src={url} path={path} title={title} canSave onClose={() => setAnalyzing(false)} />}
+      {analyzing && <FormAnalyzer src={url} path={path} title={title} canSave onSent={onSent} onClose={() => setAnalyzing(false)} />}
     </div>
   )
 }
