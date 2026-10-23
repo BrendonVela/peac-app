@@ -76,3 +76,50 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect) {
 export function notesAt(notes: VideoNote[], t: number) {
   return notes.filter(n => t >= n.t - 0.04 && t < n.t + NOTE_SHOW_SECS)
 }
+
+// ---------- Your own points (bat, ball, club…) ----------
+// You tap where it is on a few frames; the app fills in the frames between.
+export interface PointKey { t: number; x: number; y: number }
+export interface CustomPoint {
+  id: string
+  name: string
+  color: string
+  keys: PointKey[]          // sorted by time
+  link: string | null       // 'joint:rHand' or 'pt:<id>' — draws a line to it and shows its angle
+}
+export interface Annotations { v: 2; notes: VideoNote[]; points: CustomPoint[]; hidden: string[] }
+
+export const POINT_COLORS = ['#e879f9', '#a3e635', '#fb7185', '#2dd4bf', '#fde047']
+export const POINT_IDEAS = ['Bat tip', 'Bat knob', 'Ball', 'Club head', 'Barbell', 'Racket']
+
+/** Read what's saved (older saves were just a list of notes) */
+export function parseAnnotations(raw: unknown): Annotations {
+  if (Array.isArray(raw)) return { v: 2, notes: raw as VideoNote[], points: [], hidden: [] }
+  const o = (raw ?? {}) as Partial<Annotations>
+  return { v: 2, notes: o.notes ?? [], points: o.points ?? [], hidden: o.hidden ?? [] }
+}
+
+/** Where a point is at time t (0..1 across the picture), or null if it isn't placed around then */
+export function pointAt(p: CustomPoint, t: number): { x: number; y: number } | null {
+  const k = p.keys
+  if (!k.length) return null
+  if (k.length === 1) return { x: k[0].x, y: k[0].y } // placed once = stays put (like a ball on a tee)
+  if (t < k[0].t - 0.05 || t > k[k.length - 1].t + 0.05) return null
+  if (t <= k[0].t) return { x: k[0].x, y: k[0].y }
+  for (let i = 1; i < k.length; i++) {
+    if (t <= k[i].t) {
+      const a = k[i - 1], b = k[i], f = (t - a.t) / Math.max(1e-6, b.t - a.t)
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    }
+  }
+  const last = k[k.length - 1]
+  return { x: last.x, y: last.y }
+}
+
+/** Add or move the spot at time t (a tap close in time to an existing spot moves it) */
+export function setKey(p: CustomPoint, t: number, x: number, y: number): CustomPoint {
+  const keys = p.keys.filter(k => Math.abs(k.t - t) > 0.02)
+  keys.push({ t: +t.toFixed(3), x, y })
+  keys.sort((a, b) => a.t - b.t)
+  return { ...p, keys }
+}

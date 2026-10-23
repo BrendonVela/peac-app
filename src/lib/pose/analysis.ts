@@ -21,6 +21,7 @@ export const EXERCISE_LABEL: Record<ExerciseKind, string> = {
 export const JOINTS = {
   nose: 0, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16,
   lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnkle: 27, rAnkle: 28, lHeel: 29, rHeel: 30, lFoot: 31, rFoot: 32,
+  lHand: 19, rHand: 20, // index-finger knuckle = the hand (added later, so older saved videos may not have it)
 } as const
 export type JointName = keyof typeof JOINTS
 export const JOINT_NAMES = Object.keys(JOINTS) as JointName[]
@@ -28,8 +29,8 @@ export const JOINT_NAMES = Object.keys(JOINTS) as JointName[]
 /** Lines of the skeleton (left side, right side, middle) */
 export const BONES: [JointName, JointName, 'L' | 'R' | 'C'][] = [
   ['lShoulder', 'rShoulder', 'C'], ['lHip', 'rHip', 'C'],
-  ['lShoulder', 'lElbow', 'L'], ['lElbow', 'lWrist', 'L'], ['lShoulder', 'lHip', 'L'], ['lHip', 'lKnee', 'L'], ['lKnee', 'lAnkle', 'L'], ['lAnkle', 'lHeel', 'L'], ['lHeel', 'lFoot', 'L'], ['lAnkle', 'lFoot', 'L'],
-  ['rShoulder', 'rElbow', 'R'], ['rElbow', 'rWrist', 'R'], ['rShoulder', 'rHip', 'R'], ['rHip', 'rKnee', 'R'], ['rKnee', 'rAnkle', 'R'], ['rAnkle', 'rHeel', 'R'], ['rHeel', 'rFoot', 'R'], ['rAnkle', 'rFoot', 'R'],
+  ['lShoulder', 'lElbow', 'L'], ['lElbow', 'lWrist', 'L'], ['lShoulder', 'lHip', 'L'], ['lHip', 'lKnee', 'L'], ['lKnee', 'lAnkle', 'L'], ['lAnkle', 'lHeel', 'L'], ['lHeel', 'lFoot', 'L'], ['lAnkle', 'lFoot', 'L'], ['lWrist', 'lHand', 'L'],
+  ['rShoulder', 'rElbow', 'R'], ['rElbow', 'rWrist', 'R'], ['rShoulder', 'rHip', 'R'], ['rHip', 'rKnee', 'R'], ['rKnee', 'rAnkle', 'R'], ['rAnkle', 'rHeel', 'R'], ['rHeel', 'rFoot', 'R'], ['rAnkle', 'rFoot', 'R'], ['rWrist', 'rHand', 'R'],
 ]
 
 /** One video frame: time (s) and [x, y, visibility] for each joint in JOINT_NAMES order (null = not found) */
@@ -39,6 +40,7 @@ export interface Angles {
   lKnee: number | null; rKnee: number | null
   lHip: number | null; rHip: number | null
   lElbow: number | null; rElbow: number | null
+  lWrist: number | null; rWrist: number | null
   lShoulder: number | null; rShoulder: number | null
   trunk: number | null        // forward lean from vertical, degrees
   lShin: number | null; rShin: number | null // shin lean from vertical
@@ -52,6 +54,7 @@ export type AngleKey = keyof Angles
 export const ANGLE_INFO: Record<AngleKey, { name: string; side: 'L' | 'R' | 'C'; at: JointName | 'midShoulder' | 'midHip' }> = {
   lShoulder: { name: 'Shoulder', side: 'L', at: 'lShoulder' }, rShoulder: { name: 'Shoulder', side: 'R', at: 'rShoulder' },
   lElbow: { name: 'Elbow', side: 'L', at: 'lElbow' }, rElbow: { name: 'Elbow', side: 'R', at: 'rElbow' },
+  lWrist: { name: 'Wrist', side: 'L', at: 'lWrist' }, rWrist: { name: 'Wrist', side: 'R', at: 'rWrist' },
   lHip: { name: 'Hip', side: 'L', at: 'lHip' }, rHip: { name: 'Hip', side: 'R', at: 'rHip' },
   lKnee: { name: 'Knee', side: 'L', at: 'lKnee' }, rKnee: { name: 'Knee', side: 'R', at: 'rKnee' },
   lAnkle: { name: 'Ankle', side: 'L', at: 'lAnkle' }, rAnkle: { name: 'Ankle', side: 'R', at: 'rAnkle' },
@@ -90,7 +93,7 @@ export interface AnalysisResult {
 const MIN_VIS = 0.5
 
 export function pt(f: PoseFrame, j: JointName): { x: number; y: number; v: number } | null {
-  const raw = f.p[JOINT_NAMES.indexOf(j)]
+  const raw = f.p[JOINT_NAMES.indexOf(j)] // undefined on videos saved before a joint was added
   return raw ? { x: raw[0], y: raw[1], v: raw[2] } : null
 }
 
@@ -133,6 +136,8 @@ export function frameAngles(f: PoseFrame, aspect: number): Angles {
     rHip: angle3(g('rShoulder'), g('rHip'), g('rKnee'), aspect),
     lElbow: angle3(g('lShoulder'), g('lElbow'), g('lWrist'), aspect),
     rElbow: angle3(g('rShoulder'), g('rElbow'), g('rWrist'), aspect),
+    lWrist: angle3(g('lElbow'), g('lWrist'), g('lHand'), aspect),
+    rWrist: angle3(g('rElbow'), g('rWrist'), g('rHand'), aspect),
     lShoulder: angle3(g('lHip'), g('lShoulder'), g('lElbow'), aspect),
     rShoulder: angle3(g('rHip'), g('rShoulder'), g('rElbow'), aspect),
     trunk: fromVertical(mid(g('lShoulder'), g('rShoulder')), mid(g('lHip'), g('rHip')), aspect),

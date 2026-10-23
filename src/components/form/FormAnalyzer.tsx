@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText } from 'lucide-react'
+import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText, ZoomIn, ZoomOut, Crosshair, EyeOff, RotateCcw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { saveVideoAnalysis, saveVideoNotes, sendVideoReview } from '@/app/actions/videoAnalysis'
-import { drawStroke, notesAt, PEN_COLORS, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
+import { drawStroke, notesAt, PEN_COLORS, POINT_COLORS, POINT_IDEAS, parseAnnotations, pointAt, setKey, type CustomPoint, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
 import type { Message } from '@/types'
 import { extractPose, loadPoseEngine } from '@/lib/pose/engine'
 import {
@@ -41,8 +41,16 @@ function defaultShown(ex: ExerciseKind, view: View, side: 'L' | 'R' | undefined)
 /** Tapping a body point turns on/off the angle that lives there */
 const JOINT_ANGLE: Partial<Record<JointName, AngleKey>> = {
   nose: 'trunk', lShoulder: 'lShoulder', rShoulder: 'rShoulder', lElbow: 'lElbow', rElbow: 'rElbow', lWrist: 'lElbow', rWrist: 'rElbow',
-  lHip: 'lHip', rHip: 'rHip', lKnee: 'lKnee', rKnee: 'rKnee', lAnkle: 'lAnkle', rAnkle: 'rAnkle', lHeel: 'lAnkle', rHeel: 'rAnkle', lFoot: 'lAnkle', rFoot: 'rAnkle',
+  lHip: 'lHip', rHip: 'rHip', lKnee: 'lKnee', rKnee: 'rKnee', lAnkle: 'lAnkle', rAnkle: 'rAnkle', lHeel: 'lAnkle', rHeel: 'rAnkle', lFoot: 'lAnkle', rFoot: 'rAnkle', lHand: 'lWrist', rHand: 'rWrist',
 }
+const JOINT_LABEL: Record<JointName, string> = {
+  nose: 'Head', lShoulder: 'Left shoulder', rShoulder: 'Right shoulder', lElbow: 'Left elbow', rElbow: 'Right elbow',
+  lWrist: 'Left wrist', rWrist: 'Right wrist', lHand: 'Left hand', rHand: 'Right hand', lHip: 'Left hip', rHip: 'Right hip',
+  lKnee: 'Left knee', rKnee: 'Right knee', lAnkle: 'Left ankle', rAnkle: 'Right ankle', lHeel: 'Left heel', rHeel: 'Right heel',
+  lFoot: 'Left toe', rFoot: 'Right toe',
+}
+const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+type TapMenu = { x: number; y: number; joint?: JointName; point?: string } | null
 
 /** Blend the two stored frames around time t so the skeleton moves smoothly */
 function frameAt(frames: PoseFrame[], t: number): PoseFrame | null {
@@ -112,6 +120,22 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
   const [sentOk, setSentOk] = useState(false)
+  // Your own points + body points you removed
+  const [points, setPoints] = useState<CustomPoint[]>([])
+  const pointsRef = useRef<CustomPoint[]>([])
+  pointsRef.current = points
+  const [hidden, setHidden] = useState<Set<JointName>>(new Set())
+  const [placing, setPlacing] = useState<string | null>(null)
+  const placingRef = useRef<string | null>(null)
+  placingRef.current = placing
+  const [menu, setMenu] = useState<TapMenu>(null)
+  const loadedNotes = useRef(false)
+  const lastSaved = useRef('')
+  // Zoom: scale + offset of the video inside its box
+  const zoomRef = useRef({ z: 1, tx: 0, ty: 0 })
+  const [zoom, setZoomState] = useState(1)
+  const gesture = useRef<{ ptrs: Map<number, { x: number; y: number }>; moved: number; pinch: { d: number; z: number } | null }>({ ptrs: new Map(), moved: 0, pinch: null })
+  const stageRef = useRef<HTMLDivElement>(null)
   const cancel = useRef({ cancelled: false })
 
   // Saved results from an earlier run?
@@ -124,8 +148,11 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       .maybeSingle()
       .then(({ data }) => {
         if (!alive) return
-        const saved = (data?.annotations as VideoNote[] | null) ?? []
-        if (saved.length) setNotes(saved)
+        const ann = parseAnnotations(data?.annotations)
+        const saved = [...ann.notes, ...ann.points]
+        setNotes(ann.notes); setPoints(ann.points); setHidden(new Set(ann.hidden as JointName[]))
+        lastSaved.current = JSON.stringify({ v: 2, notes: ann.notes, points: ann.points, hidden: ann.hidden })
+        loadedNotes.current = true
         if (data?.frames?.length) {
           setExercise(data.exercise as ExerciseKind)
           setView(data.view as View)
@@ -170,28 +197,143 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     const va = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : aspect
     let dw = W, dh = W / va
     if (dh > H) { dh = H; dw = H * va }
-    return { W, H, dw, dh, ox: (W - dw) / 2, oy: (H - dh) / 2, va }
+    const { z, tx, ty } = zoomRef.current
+    return { W, H, dw: dw * z, dh: dh * z, ox: tx + ((W - dw) / 2) * z, oy: ty + ((H - dh) / 2) * z, va }
   }
 
-  /** Tap a body point to turn its angle on/off; tap anywhere else to play/pause */
+  // ---------- Zoom + pan ----------
+  function applyZoom(z: number, tx: number, ty: number) {
+    const box = boxRef.current
+    const W = box?.clientWidth ?? 0, H = box?.clientHeight ?? 0
+    z = Math.max(1, Math.min(6, z))
+    tx = Math.min(0, Math.max(W - W * z, tx))
+    ty = Math.min(0, Math.max(H - H * z, ty))
+    zoomRef.current = { z, tx, ty }
+    if (stageRef.current) stageRef.current.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`
+    setZoomState(z)
+  }
+  /** Zoom to z keeping the spot (cx, cy) in the box under the finger */
+  function zoomAt(z: number, cx: number, cy: number) {
+    const o = zoomRef.current
+    const nz = Math.max(1, Math.min(6, z))
+    applyZoom(nz, cx - (cx - o.tx) * (nz / o.z), cy - (cy - o.ty) * (nz / o.z))
+  }
+  function zoomBy(f: number) {
+    const box = boxRef.current; if (!box) return
+    zoomAt(zoomRef.current.z * f, box.clientWidth / 2, box.clientHeight / 2)
+  }
+  function local(e: { clientX: number; clientY: number }) {
+    const b = boxRef.current!.getBoundingClientRect()
+    return { x: e.clientX - b.left, y: e.clientY - b.top }
+  }
+  function onBoxPointerDown(e: React.PointerEvent) {
+    const g = gesture.current
+    g.ptrs.set(e.pointerId, local(e))
+    if (g.ptrs.size === 1) g.moved = 0
+    if (g.ptrs.size === 2) {
+      const [a, b] = Array.from(g.ptrs.values())
+      g.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: zoomRef.current.z }
+      inProgress.current = null // two fingers = zoom, not draw
+    }
+  }
+  function onBoxPointerMove(e: React.PointerEvent) {
+    const g = gesture.current
+    const prev = g.ptrs.get(e.pointerId)
+    if (!prev) return
+    const p = local(e)
+    g.ptrs.set(e.pointerId, p)
+    if (g.ptrs.size >= 2 && g.pinch) {
+      const [a, b] = Array.from(g.ptrs.values())
+      const d = Math.hypot(a.x - b.x, a.y - b.y)
+      zoomAt(g.pinch.z * (d / Math.max(1, g.pinch.d)), (a.x + b.x) / 2, (a.y + b.y) / 2)
+      g.moved += 10
+      return
+    }
+    if (drawModeRef.current || zoomRef.current.z <= 1) return
+    const dx = p.x - prev.x, dy = p.y - prev.y
+    g.moved += Math.abs(dx) + Math.abs(dy)
+    const o = zoomRef.current
+    applyZoom(o.z, o.tx + dx, o.ty + dy)
+  }
+  function onBoxPointerUp(e: React.PointerEvent) {
+    const g = gesture.current
+    g.ptrs.delete(e.pointerId)
+    if (g.ptrs.size < 2) g.pinch = null
+  }
+  useEffect(() => { if (phase === 'ready') applyZoom(1, 0, 0) }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Mouse wheel / trackpad pinch zooms (needs a non-passive listener to stop the page scrolling)
+  useEffect(() => {
+    const box = boxRef.current
+    if (phase !== 'ready' || !box) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const b = box.getBoundingClientRect()
+      zoomAt(zoomRef.current.z * Math.exp(-e.deltaY * 0.0025), e.clientX - b.left, e.clientY - b.top)
+    }
+    box.addEventListener('wheel', onWheel, { passive: false })
+    return () => box.removeEventListener('wheel', onWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  // ---------- Points ----------
+  function addPoint(name: string) {
+    const p: CustomPoint = { id: newId(), name, color: POINT_COLORS[points.length % POINT_COLORS.length], keys: [], link: /bat|club|racket/i.test(name) && frames.length ? 'joint:rHand' : null }
+    setPoints(ps => [...ps, p])
+    videoRef.current?.pause(); setPlaying(false)
+    setPlacing(p.id)
+    setDrawMode(false)
+  }
+  function updatePoint(id: string, fn: (p: CustomPoint) => CustomPoint) {
+    setPoints(ps => ps.map(p => (p.id === id ? fn(p) : p)))
+  }
+  function removeJoint(j: JointName) { setHidden(h => new Set(h).add(j)); setFlash(`${JOINT_LABEL[j]} removed`) }
+  function restoreJoint(j: JointName) { setHidden(h => { const n = new Set(h); n.delete(j); return n }) }
+  function linkPos(link: string | null, f: PoseFrame | null, t: number) {
+    if (!link) return null
+    if (link.startsWith('joint:')) {
+      const j = link.slice(6) as JointName
+      if (!f || hidden.has(j)) return null
+      const q = pt(f, j)
+      return q && q.v >= 0.35 ? { x: q.x, y: q.y } : null
+    }
+    const other = pointsRef.current.find(p => p.id === link.slice(3))
+    return other ? pointAt(other, t) : null
+  }
+
+  /** Tap: place a point (when placing), open the menu for a body/your point, otherwise play/pause */
   function onBoxTap(e: React.MouseEvent<HTMLDivElement>) {
     if (drawModeRef.current) return
+    if (gesture.current.moved > 8) { gesture.current.moved = 0; return } // that was a drag/zoom
     const r = videoRect(), video = videoRef.current, box = boxRef.current
     if (!r || !video || !box) return
-    const b = box.getBoundingClientRect()
-    const x = e.clientX - b.left, y = e.clientY - b.top
-    const f = frameAt(frames, video.currentTime)
-    let best: JointName | null = null, bestD = 28
+    const { x, y } = local(e)
+    const t = video.currentTime
+    if (menu) { setMenu(null); return }
+    if (placingRef.current) {
+      const nx = (x - r.ox) / r.dw, ny = (y - r.oy) / r.dh
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return
+      updatePoint(placingRef.current, p => setKey(p, t, nx, ny))
+      return
+    }
+    // Your points first, then body points
+    let bestD = 28
+    let hit: TapMenu = null
+    for (const p of points) {
+      const q = pointAt(p, t); if (!q) continue
+      const d = Math.hypot(r.ox + q.x * r.dw - x, r.oy + q.y * r.dh - y)
+      if (d < bestD) { bestD = d; hit = { x, y, point: p.id } }
+    }
+    const f = frameAt(frames, t)
     if (f && showPoints) {
       for (const j of JOINT_NAMES) {
-        const p = pt(f, j)
-        if (!p || p.v < 0.35) continue
-        const d = Math.hypot(r.ox + p.x * r.dw - x, r.oy + p.y * r.dh - y)
-        if (d < bestD) { bestD = d; best = j }
+        if (hidden.has(j)) continue
+        const q = pt(f, j)
+        if (!q || q.v < 0.35) continue
+        const d = Math.hypot(r.ox + q.x * r.dw - x, r.oy + q.y * r.dh - y)
+        if (d < bestD) { bestD = d; hit = { x, y, joint: j } }
       }
     }
-    const k = best ? JOINT_ANGLE[best] : undefined
-    if (k) toggleAngle(k)
+    if (hit) { video.pause(); setPlaying(false); setMenu(hit) }
     else togglePlay()
   }
 
@@ -251,6 +393,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     const f = frameAt(frames, video.currentTime)
     if (f) {
     const P = (j: JointName) => {
+      if (hidden.has(j)) return null
       const p = pt(f, j)
       return p && p.v >= 0.35 ? { x: ox + p.x * dw, y: oy + p.y * dh, v: p.v } : null
     }
@@ -266,16 +409,19 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     ctx.globalAlpha = 1
     const ringed = new Set<JointName>()
     for (const k of Array.from(shown)) { const at = ANGLE_INFO[k].at; if (at !== 'midShoulder' && at !== 'midHip') ringed.add(at) }
-    for (const [a, , side] of showPoints ? BONES : []) {
+    const dots = new Map<JointName, 'L' | 'R' | 'C'>()
+    for (const [a, b, sd] of BONES) { if (!dots.has(a)) dots.set(a, sd); if (!dots.has(b)) dots.set(b, sd) }
+    dots.set('nose', 'C')
+    for (const [a, side] of showPoints ? Array.from(dots.entries()) : []) {
       const A = P(a)
       if (!A) continue
       if (ringed.has(a)) { ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(A.x, A.y, 9, 0, Math.PI * 2); ctx.stroke() }
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(A.x, A.y, 5, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = COLORS[side === 'C' ? (a.startsWith('l') ? 'L' : 'R') : side]
+      ctx.fillStyle = side === 'C' && a === 'nose' ? '#e4e4e7' : COLORS[side === 'C' ? (a.startsWith('l') ? 'L' : 'R') : side]
       ctx.beginPath(); ctx.arc(A.x, A.y, 3.2, 0, Math.PI * 2); ctx.fill()
     }
     // Angle labels next to the joints
-    const ang = frameAngles(f, va)
+    const ang = frameAngles(hidden.size ? { t: f.t, p: f.p.map((q, i) => (hidden.has(JOINT_NAMES[i]) ? null : q)) } : f, va)
     ctx.font = '600 12px Inter, system-ui, sans-serif'
     for (const key of ANGLE_KEYS) {
       if (!shown.has(key)) continue
@@ -306,8 +452,39 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       ? [...draft.current, ...(inProgress.current ? [inProgress.current] : [])]
       : notesAt(notesRef.current, video.currentTime).flatMap(n => n.strokes)
     for (const s of strokes) drawStroke(ctx, s, r)
+
+    // Your points (bat, ball…) with an optional line + angle to another point
+    const t = video.currentTime
+    ctx.font = '600 12px Inter, system-ui, sans-serif'
+    for (const p of pointsRef.current) {
+      const q = pointAt(p, t)
+      const isPlacing = placingRef.current === p.id
+      if (!q) continue
+      const X = r.ox + q.x * r.dw, Y = r.oy + q.y * r.dh
+      const o = linkPos(p.link, f, t)
+      if (o) {
+        const OX = r.ox + o.x * r.dw, OY = r.oy + o.y * r.dh
+        ctx.strokeStyle = p.color; ctx.lineWidth = 3.5; ctx.lineCap = 'round'
+        ctx.beginPath(); ctx.moveTo(OX, OY); ctx.lineTo(X, Y); ctx.stroke()
+        const dx = (q.x - o.x) * va, dy = q.y - o.y
+        const deg = Math.round((Math.atan2(Math.abs(dy), Math.abs(dx)) * 180) / Math.PI)
+        const text = `${p.name} ${deg}° ${dy > 0.002 ? 'below' : dy < -0.002 ? 'above' : ''} level`.replace('  ', ' ')
+        const w = ctx.measureText(text).width + 10
+        const lx = (X + OX) / 2 - w / 2, ly = (Y + OY) / 2 - 10
+        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(lx, ly - 13, w, 18)
+        ctx.fillStyle = p.color; ctx.fillText(text, lx + 5, ly)
+      }
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(X, Y, 7, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(X, Y, 5, 0, Math.PI * 2); ctx.fill()
+      if (isPlacing) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, Y, 12, 0, Math.PI * 2); ctx.stroke() }
+      if (!o) {
+        const w = ctx.measureText(p.name).width + 8
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(X + 10, Y - 20, w, 16)
+        ctx.fillStyle = p.color; ctx.fillText(p.name, X + 14, Y - 8)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frames, aspect, shown, showBones, showPoints])
+  }, [frames, aspect, shown, showBones, showPoints, hidden])
 
   useEffect(() => {
     if (phase !== 'ready') return
@@ -375,14 +552,24 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     else draft.current.pop()
     setDraftVer(v => v + 1)
   }
-  async function persistNotes(next: VideoNote[]) {
+  function persistNotes(next: VideoNote[]) {
     setNotes(next)
     setSentOk(false)
-    if (!canSave) return
-    setNotesMsg('Saving…')
-    const r = await saveVideoNotes(path, next)
-    setNotesMsg(r && 'error' in r && r.error ? `Not saved: ${r.error}` : '✓ Saved')
   }
+  // Save notes + your points + removed points a moment after any change
+  useEffect(() => {
+    if (!loadedNotes.current || !canSave) return
+    const data = { v: 2 as const, notes, points, hidden: Array.from(hidden) }
+    const json = JSON.stringify(data)
+    if (json === lastSaved.current) return
+    setNotesMsg('Saving…')
+    const tm = setTimeout(async () => {
+      const r = await saveVideoNotes(path, data)
+      if (!(r && 'error' in r && r.error)) lastSaved.current = json
+      setNotesMsg(r && 'error' in r && r.error ? `Not saved: ${r.error}` : '✓ Saved')
+    }, 800)
+    return () => clearTimeout(tm)
+  }, [notes, points, hidden, canSave, path])
   function saveNote() {
     const strokes = draft.current.slice()
     if (!strokes.length && !noteText.trim()) { setDrawMode(false); return }
@@ -489,7 +676,17 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
 
         {phase === 'ready' && (
           <>
-            <div ref={boxRef} onClick={onBoxTap} className="relative w-full h-[55vh] rounded-xl bg-black overflow-hidden cursor-pointer select-none">
+            <div
+              ref={boxRef}
+              onClick={onBoxTap}
+              onPointerDown={onBoxPointerDown}
+              onPointerMove={onBoxPointerMove}
+              onPointerUp={onBoxPointerUp}
+              onPointerCancel={onBoxPointerUp}
+              style={{ touchAction: 'none' }}
+              className={cn('relative w-full h-[55vh] rounded-xl bg-black overflow-hidden select-none', placing ? 'cursor-crosshair' : zoom > 1 ? 'cursor-grab' : 'cursor-pointer')}
+            >
+              <div ref={stageRef} className="absolute inset-0 origin-top-left" style={{ transform: 'translate(0px, 0px) scale(1)' }}>
               <video
                 ref={videoRef}
                 src={src}
@@ -501,13 +698,14 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                 onLoadedMetadata={e => { setDuration(e.currentTarget.duration); if (e.currentTarget.videoWidth) setAspect(e.currentTarget.videoWidth / e.currentTarget.videoHeight) }}
                 onEnded={() => setPlaying(false)}
               />
+              </div>
               <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
               <div className="absolute left-2 top-2 flex gap-2 text-[10px] font-semibold">
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.L }}>● Left</span>
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.R }}>● Right</span>
               </div>
               {flash && <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">{flash}</div>}
-              {!drawMode && frames.length > 0 && showingNotes.length === 0 && <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point to show/hide its angle</p>}
+              {!drawMode && !placing && frames.length > 0 && showingNotes.length === 0 && <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point for options · pinch or + to zoom</p>}
               {showingNotes.some(n => n.text) && (
                 <div className="absolute inset-x-2 bottom-2 space-y-1">
                   {showingNotes.filter(n => n.text).map(n => (
@@ -526,7 +724,61 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                   onPointerCancel={penUp}
                 />
               )}
-              {drawMode && <div className="absolute right-2 top-2 rounded bg-yellow-400 px-2 py-0.5 text-[10px] font-bold text-black">DRAWING · {time.toFixed(2)}s</div>}
+              {drawMode && <div className="absolute left-1/2 top-9 -translate-x-1/2 rounded bg-yellow-400 px-2 py-0.5 text-[10px] font-bold text-black">DRAWING · {time.toFixed(2)}s</div>}
+              {/* Zoom buttons */}
+              <div className="absolute right-2 top-2 flex items-center gap-1" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                <button onClick={() => zoomBy(1 / 1.5)} disabled={zoom <= 1} className="w-8 h-8 rounded-lg bg-black/70 text-white flex items-center justify-center disabled:opacity-40" aria-label="Zoom out"><ZoomOut className="w-4 h-4" /></button>
+                <button onClick={() => zoomBy(1.5)} disabled={zoom >= 6} className="w-8 h-8 rounded-lg bg-black/70 text-white flex items-center justify-center disabled:opacity-40" aria-label="Zoom in"><ZoomIn className="w-4 h-4" /></button>
+                {zoom > 1.01 && <button onClick={() => applyZoom(1, 0, 0)} className="h-8 rounded-lg bg-black/70 px-2 text-[11px] font-semibold text-white">{zoom.toFixed(1)}× ✕</button>}
+              </div>
+              {/* Placing your point */}
+              {placing && (() => {
+                const p = points.find(x => x.id === placing)
+                return (
+                  <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/85 p-2.5 text-xs text-white space-y-1.5" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                    <p><b style={{ color: p?.color }}>Placing: {p?.name}</b> · {p?.keys.length ?? 0} spot{p?.keys.length === 1 ? '' : 's'}</p>
+                    <p className="text-zinc-300">Tap where it is. Then step ahead with › (or drag the slider) and tap again. Do a few spots through the movement and it fills in between. Tap again on the same frame to move it.</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => step(-3)} className="rounded bg-zinc-700 px-2.5 py-1">‹‹</button>
+                      <button onClick={() => step(3)} className="rounded bg-zinc-700 px-2.5 py-1">››</button>
+                      <button onClick={() => setPlacing(null)} className="ml-auto rounded bg-blue-600 px-3 py-1 font-semibold">Done</button>
+                    </div>
+                  </div>
+                )
+              })()}
+              {/* Tap menu for a point */}
+              {menu && (
+                <div
+                  className="absolute z-10 w-48 rounded-xl border border-zinc-700 bg-zinc-900/95 p-1.5 shadow-xl text-sm"
+                  style={{ left: Math.min(menu.x, (boxRef.current?.clientWidth ?? 300) - 200), top: Math.min(menu.y + 8, (boxRef.current?.clientHeight ?? 300) - 150) }}
+                  onClick={e => e.stopPropagation()}
+                  onPointerDown={e => e.stopPropagation()}
+                >
+                  {menu.joint && (() => {
+                    const j = menu.joint!
+                    const k = JOINT_ANGLE[j]
+                    return (
+                      <>
+                        <p className="px-2 py-1 text-[11px] font-semibold text-zinc-400">{JOINT_LABEL[j]}</p>
+                        {k && <button onClick={() => { toggleAngle(k); setMenu(null) }} className="w-full rounded-lg px-2 py-2 text-left text-white hover:bg-zinc-800">{shown.has(k) ? 'Hide' : 'Show'} {angleLabel(k).toLowerCase()} angle</button>}
+                        <button onClick={() => { removeJoint(j); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-red-300 hover:bg-zinc-800"><EyeOff className="w-4 h-4" /> Remove this point</button>
+                      </>
+                    )
+                  })()}
+                  {menu.point && (() => {
+                    const p = points.find(x => x.id === menu.point)
+                    if (!p) return null
+                    return (
+                      <>
+                        <p className="px-2 py-1 text-[11px] font-semibold" style={{ color: p.color }}>{p.name}</p>
+                        <button onClick={() => { setPlacing(p.id); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-white hover:bg-zinc-800"><Crosshair className="w-4 h-4" /> Move / add spots</button>
+                        <button onClick={() => { setPoints(ps => ps.filter(x => x.id !== p.id).map(x => (x.link === `pt:${p.id}` ? { ...x, link: null } : x))); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-red-300 hover:bg-zinc-800"><Trash2 className="w-4 h-4" /> Delete point</button>
+                      </>
+                    )
+                  })()}
+                  <button onClick={() => setMenu(null)} className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-zinc-500 hover:bg-zinc-800">Close</button>
+                </div>
+              )}
             </div>
 
             {/* Controls */}
@@ -552,6 +804,54 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                 </div>
               </div>
             </div>
+
+            {/* Your points + removed body points */}
+            {!drawMode && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                  <Crosshair className="w-4 h-4 text-fuchsia-400" /> Points
+                  <span className="ml-auto text-[11px] font-normal text-zinc-500">Add a point to follow the bat, ball…</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {POINT_IDEAS.map(n => (
+                    <button key={n} onClick={() => addPoint(n)} className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-white">+ {n}</button>
+                  ))}
+                  <button onClick={() => { const n = window.prompt('Name this point (e.g. Bat tip)'); if (n?.trim()) addPoint(n.trim()) }} className="rounded-full border border-zinc-700 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-white">+ Other…</button>
+                </div>
+                {points.length > 0 && (
+                  <ul className="divide-y divide-zinc-800">
+                    {points.map(p => (
+                      <li key={p.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                        <span className="w-3 h-3 rounded-full" style={{ background: p.color }} />
+                        <span className="text-white">{p.name}</span>
+                        <span className="text-[11px] text-zinc-500">{p.keys.length} spot{p.keys.length === 1 ? '' : 's'}</span>
+                        <select
+                          value={p.link ?? ''}
+                          onChange={e => updatePoint(p.id, x => ({ ...x, link: e.target.value || null }))}
+                          className="ml-auto max-w-[9rem] rounded bg-zinc-800 border border-zinc-700 px-1.5 py-1 text-[11px] text-zinc-200"
+                          aria-label="Draw a line to"
+                        >
+                          <option value="">No line</option>
+                          {frames.length > 0 && (['rHand', 'lHand', 'rWrist', 'lWrist', 'rFoot', 'lFoot'] as JointName[]).map(j => <option key={j} value={`joint:${j}`}>Line to {JOINT_LABEL[j].toLowerCase()}</option>)}
+                          {points.filter(o => o.id !== p.id).map(o => <option key={o.id} value={`pt:${o.id}`}>Line to {o.name}</option>)}
+                        </select>
+                        <button onClick={() => { videoRef.current?.pause(); setPlaying(false); setPlacing(p.id) }} className={cn('rounded-lg border px-2 py-1 text-[11px]', placing === p.id ? 'border-blue-500 text-white' : 'border-zinc-700 text-zinc-300')}>Place</button>
+                        <button onClick={() => setPoints(ps => ps.filter(x => x.id !== p.id).map(x => (x.link === `pt:${p.id}` ? { ...x, link: null } : x)))} className="p-1 text-zinc-500 hover:text-red-400" aria-label="Delete point"><Trash2 className="w-4 h-4" /></button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {hidden.size > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-800 pt-2">
+                    <span className="text-[11px] text-zinc-500">Removed:</span>
+                    {Array.from(hidden).map(j => (
+                      <button key={j} onClick={() => restoreJoint(j)} className="flex items-center gap-1 rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-400 hover:text-white"><RotateCcw className="w-3 h-3" /> {JOINT_LABEL[j]}</button>
+                    ))}
+                    <button onClick={() => setHidden(new Set())} className="text-[11px] text-zinc-400 underline">Bring all back</button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Draw + notes */}
             {drawMode ? (

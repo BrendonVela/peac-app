@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendPushToUsers } from '@/lib/push'
 import type { AnalysisResult, PoseFrame } from '@/lib/pose/analysis'
-import type { VideoNote } from '@/lib/pose/annotations'
+import type { Annotations } from '@/lib/pose/annotations'
 
 /** Save the form-analysis results for a video so it opens instantly next time */
 export async function saveVideoAnalysis(videoPath: string, result: AnalysisResult, frames: PoseFrame[]) {
@@ -29,7 +29,7 @@ export async function saveVideoAnalysis(videoPath: string, result: AnalysisResul
 }
 
 /** Save coach drawings + notes for a video */
-export async function saveVideoNotes(videoPath: string, notes: VideoNote[]) {
+export async function saveVideoNotes(videoPath: string, notes: Annotations) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in' }
