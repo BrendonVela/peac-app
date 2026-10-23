@@ -14,6 +14,8 @@ import { deleteAthlete } from '@/app/actions/admin'
 import type { Athlete } from '@/types'
 import { InviteCard } from './InviteCard'
 import { getActingCoachId } from '@/app/actions/viewAs'
+import { GroupsBar } from '@/components/groups/GroupsBar'
+import type { Group } from '@/app/actions/groups'
 
 export default function AthletesPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -26,6 +28,8 @@ const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null)
 const [editError, setEditError] = useState('')
 const [editLoading, setEditLoading] = useState(false)
 const [isAdmin, setIsAdmin] = useState(false)
+  const [groupFilter, setGroupFilter] = useState<string | null>(null)
+  const [groups, setGroups] = useState<Group[]>([])
   useEffect(() => {
     const supabase = createClient()
     supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
@@ -46,10 +50,11 @@ const [isAdmin, setIsAdmin] = useState(false)
     })
   }, [showModal])
 
-  const filtered = athletes.filter(a =>
+  const inGroup = groupFilter ? new Set(groups.find(g => g.id === groupFilter)?.athleteIds ?? []) : null
+  const filtered = athletes.filter(a => (!inGroup || inGroup.has(a.id)) && (
     a.name.toLowerCase().includes(search.toLowerCase()) ||
     (a.sport ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  ))
 
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -140,6 +145,12 @@ async function handleUnclaim(athleteId: string) {
           className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
+<GroupsBar
+        athletes={athletes.map(a => ({ id: a.id, name: a.name }))}
+        selected={groupFilter}
+        onSelect={setGroupFilter}
+        onGroups={setGroups}
+      />
 {unclaimed.length > 0 && (
   <Card className="border-blue-600/40 bg-blue-600/5">
     <CardContent className="py-4 space-y-3">

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer } from 'lucide-react'
+import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer, Shuffle } from 'lucide-react'
 import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
 import { logWorkoutResult } from '@/app/actions/workouts'
+import { setWorkoutSwap } from '@/app/actions/swaps'
+import { FormVideoButton } from './FormVideoButton'
 import { cn } from '@/lib/utils'
 
 function getYouTubeEmbedUrl(url: string): string | null {
@@ -55,6 +57,11 @@ interface Props {
   exerciseTitle?: string
   /** false inside a superset (except the last exercise) so the timer doesn't start between A1 and A2 */
   autoRest?: boolean
+  /** Exercises the coach allows instead of this one */
+  alternatives?: { id: string; title: string; video_url: string | null }[]
+  initialSwapId?: string | null
+  /** Show the 'Send video to coach' button (athlete only) */
+  canSendVideo?: boolean
 }
 
 function fireRest(eventName: string, detail: RestEventDetail) {
@@ -81,6 +88,7 @@ export function WorkoutLogger({
   workoutExerciseId, workoutId, athleteId, targets,
   initialSetLogs, initialWeight, initialReps, initialCompleted, initialNotes, videoUrl, lastTime,
   restSeconds = 90, restLabel = null, exerciseTitle = 'Exercise', autoRest = true,
+  alternatives = [], initialSwapId = null, canSendVideo = false,
 }: Props) {
   const setCount = Math.max(1, targets.length)
 
@@ -108,7 +116,20 @@ export function WorkoutLogger({
   const [saved, setSaved] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
 
-  const embedUrl = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null
+  const [swapId, setSwapId] = useState<string | null>(initialSwapId)
+  const [showSwaps, setShowSwaps] = useState(false)
+  const swapped = alternatives.find(a => a.id === swapId) ?? null
+  const shownVideo = swapped ? swapped.video_url : videoUrl
+  const shownTitle = swapped ? swapped.title : exerciseTitle
+
+  async function chooseSwap(id: string | null) {
+    setShowSwaps(false)
+    setSwapId(id)
+    setShowVideo(false)
+    await setWorkoutSwap(athleteId, workoutId, workoutExerciseId, id)
+  }
+
+  const embedUrl = shownVideo ? getYouTubeEmbedUrl(shownVideo) : null
   const doneSets = rows.filter(r => r.done).length
 
   async function persist(nextRows: Row[], isCompleted: boolean) {
@@ -175,7 +196,29 @@ export function WorkoutLogger({
 
   return (
     <div className="space-y-3">
-      {lastTime && lastSummary && (
+      {swapped && (
+        <div className="flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-sm">
+          <Shuffle className="w-4 h-4 text-violet-300 shrink-0" />
+          <span className="flex-1 min-w-0 text-violet-100">Doing instead: <b>{swapped.title}</b></span>
+          <button onClick={() => chooseSwap(null)} className="text-xs text-violet-300 hover:text-white">Undo</button>
+        </div>
+      )}
+      {showSwaps && (
+        <div className="rounded-lg border border-zinc-700 bg-zinc-900 divide-y divide-zinc-800 overflow-hidden">
+          <p className="px-3 py-2 text-xs text-zinc-400">Equipment taken or something doesn&apos;t feel right? Your coach allows:</p>
+          {swapId && (
+            <button onClick={() => chooseSwap(null)} className="w-full px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800">
+              ↩ Back to {exerciseTitle}
+            </button>
+          )}
+          {alternatives.filter(a => a.id !== swapId).map(a => (
+            <button key={a.id} onClick={() => chooseSwap(a.id)} className="w-full px-3 py-2.5 text-left text-sm text-white hover:bg-zinc-800">
+              {a.title}
+            </button>
+          ))}
+        </div>
+      )}
+      {lastTime && lastSummary && !swapped && (
         <p className="text-xs text-violet-300/90">
           <span className="text-zinc-500">Last time ({daysAgoLabel(lastTime.date)}):</span> {lastSummary}
         </p>
@@ -280,7 +323,7 @@ export function WorkoutLogger({
         </button>
 
         <button
-          onClick={() => fireRest(REST_START_EVENT, { seconds: restSeconds, title: exerciseTitle })}
+          onClick={() => fireRest(REST_START_EVENT, { seconds: restSeconds, title: shownTitle })}
           className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all whitespace-nowrap"
           title={restLabel ? `Coach: rest ${restLabel}` : 'Start a rest timer'}
         >
@@ -288,9 +331,20 @@ export function WorkoutLogger({
           Rest {formatClock(restSeconds)}
         </button>
 
+        {alternatives.length > 0 && (
+          <button
+            onClick={() => setShowSwaps(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-violet-300 hover:text-white hover:border-zinc-600 whitespace-nowrap"
+          >
+            <Shuffle className="w-4 h-4" /> Swap
+          </button>
+        )}
+
+        {canSendVideo && <FormVideoButton exerciseTitle={shownTitle} />}
+
         {/* Video control (right side) */}
         <div className="ml-auto">
-          {!videoUrl ? (
+          {!shownVideo ? (
             <span className="flex items-center gap-1.5 text-sm text-amber-400">
               <VideoOff className="w-3.5 h-3.5" />
               No video
@@ -305,7 +359,7 @@ export function WorkoutLogger({
             </button>
           ) : (
             <a
-              href={videoUrl}
+              href={shownVideo}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 whitespace-nowrap"

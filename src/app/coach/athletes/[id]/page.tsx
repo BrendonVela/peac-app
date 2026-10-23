@@ -11,6 +11,8 @@ import { MaxesForm } from './MaxesForm'
 import { ManageAthlete } from './ManageAthlete'
 import { LinkAccount, type SignedUpAthlete } from './LinkAccount'
 import { LiftProgress } from '@/components/LiftProgress'
+import { TrainingLoad } from './TrainingLoad'
+import type { SessionRow } from '@/lib/load'
 import { getLiftHistory } from '@/lib/liftHistory'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 import { getAthleteSchedule, formatMonthDay } from '@/lib/schedule'
@@ -34,7 +36,7 @@ export default async function AthleteDetailPage({
 
   if (!athlete) notFound()
 
-  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts, { data: isAdmin }] = await Promise.all([
+  const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts, { data: isAdmin }, { data: sessionRows }] = await Promise.all([
     supabase
       .from('check_ins')
       .select('*')
@@ -50,6 +52,12 @@ export default async function AthleteDetailPage({
     supabase.from('athlete_maxes').select('lift, value, updated_at').eq('athlete_id', params.id),
     getLiftHistory(supabase, params.id),
     supabase.rpc('is_admin'),
+    supabase
+      .from('workout_sessions')
+      .select('workout_id, rpe, minutes, notes, completed_at, workouts(title)')
+      .eq('athlete_id', params.id)
+      .order('completed_at', { ascending: false })
+      .limit(200),
   ])
 
   // Hand-added athlete with no login: offer to combine with the account they made
@@ -177,6 +185,8 @@ export default async function AthleteDetailPage({
           <MaxesForm athleteId={params.id} initial={maxes} updatedAt={maxesUpdated} />
         </CardContent>
       </Card>
+
+      <TrainingLoad sessions={(sessionRows ?? []) as unknown as SessionRow[]} />
 
       {/* Main lift progress */}
       <div className="space-y-3">

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { sendMessage, markMessagesRead, broadcastMessage, adminDeleteMessage, adminDeleteConversation, type BroadcastAudience } from '@/app/actions/messages'
 import { Modal } from '@/components/ui/Modal'
+import { MessageAttachment } from '@/components/MessageAttachment'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types'
 
@@ -322,6 +323,7 @@ export default function CoachMessagesPage() {
                         )}
                       >
                         <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        {msg.attachment_path && <MessageAttachment path={msg.attachment_path} type={msg.attachment_type} />}
                         <p className={cn('text-[10px] mt-1', isMe ? 'text-blue-200' : 'text-zinc-500')}>
                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>

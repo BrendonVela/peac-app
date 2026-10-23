@@ -73,6 +73,12 @@ html {
   }
 }
 
+/* Weight-room tablet: no sidebar or tab bar, so the rest timer sits at the very bottom */
+.kiosk .rest-timer {
+  left: 0 !important;
+  bottom: env(safe-area-inset-bottom) !important;
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

@@ -37,6 +37,12 @@ export default async function CoachWorkoutView({ params }: { params: { id: strin
   ;(maxRows ?? []).forEach((m: any) => { maxes[m.lift as LiftKey] = Number(m.value) })
 
   const resultMap = new Map((results ?? []).map((r: any) => [r.workout_exercise_id, r]))
+  const swapIds = Array.from(new Set((results ?? []).map((r: any) => r.swapped_exercise_id).filter(Boolean)))
+  const swapTitle = new Map<string, string>()
+  if (swapIds.length) {
+    const { data: sw } = await supabase.from('exercises').select('id, title').in('id', swapIds)
+    ;(sw ?? []).forEach((e: any) => swapTitle.set(e.id, e.title))
+  }
   const exercises = ((workout.workout_exercises ?? []) as any[]).sort((a, b) => a.order - b.order)
   const doneCount = exercises.filter(wx => resultMap.get(wx.id)?.completed).length
   const lastLogged = (results ?? []).map((r: any) => r.logged_at as string).sort().pop()
@@ -95,6 +101,9 @@ export default async function CoachWorkoutView({ params }: { params: { id: strin
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="min-w-0">
                     <CardTitle>{i + 1}. {wx.exercises?.title}</CardTitle>
+                    {result?.swapped_exercise_id && swapTitle.get(result.swapped_exercise_id) && (
+                      <p className="text-xs text-violet-300 mt-0.5">Swapped to: {swapTitle.get(result.swapped_exercise_id)}</p>
+                    )}
                     {wx.notes && (
                       <p className="flex items-start gap-1.5 text-xs text-zinc-500 mt-1.5">
                         <ClipboardList className="w-3.5 h-3.5 mt-px shrink-0" /> {wx.notes}

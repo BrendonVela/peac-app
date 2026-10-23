@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Users } from 'lucide-react'
+import { listGroups, assignProgramToGroup, type Group } from '@/app/actions/groups'
 import { cn } from '@/lib/utils'
 import { assignProgram, unassignProgram } from '@/app/actions/programs'
 import type { Athlete } from '@/types'
@@ -14,6 +16,22 @@ interface Props {
 export function AssignProgramForm({ programId, athletes, assignedIds }: Props) {
   const [assigned, setAssigned] = useState(new Set(assignedIds))
   const [loading, setLoading] = useState<string | null>(null)
+  const [groups, setGroups] = useState<Group[]>([])
+  const [groupMsg, setGroupMsg] = useState('')
+
+  useEffect(() => { listGroups().then(setGroups) }, [])
+
+  async function assignGroup(g: Group) {
+    if (!confirm(`Assign this program to everyone in "${g.name}" (${g.athleteIds.length})?`)) return
+    setLoading(`g-${g.id}`); setGroupMsg('')
+    const res = await assignProgramToGroup(programId, g.id)
+    setLoading(null)
+    if ('error' in res && res.error) { setGroupMsg(res.error); return }
+    if ('ids' in res && res.ids) {
+      setAssigned(prev => { const next = new Set<string>(prev); res.ids!.forEach(id => next.add(id)); return next })
+      setGroupMsg(`Assigned to ${res.added} new athlete${res.added === 1 ? '' : 's'} in ${g.name}.`)
+    }
+  }
 
   async function toggle(athleteId: string) {
     setLoading(athleteId)
@@ -32,6 +50,23 @@ export function AssignProgramForm({ programId, athletes, assignedIds }: Props) {
   }
 
   return (
+    <div className="space-y-3">
+    {groups.length > 0 && (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs text-zinc-500"><Users className="w-3.5 h-3.5" /> Assign a whole group:</span>
+        {groups.map(g => (
+          <button
+            key={g.id}
+            onClick={() => assignGroup(g)}
+            disabled={loading === `g-${g.id}`}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:text-white hover:border-blue-500 disabled:opacity-50"
+          >
+            {g.name} ({g.athleteIds.length})
+          </button>
+        ))}
+        {groupMsg && <span className="text-xs text-green-400">{groupMsg}</span>}
+      </div>
+    )}
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
       {athletes.map(athlete => {
         const isAssigned = assigned.has(athlete.id)
@@ -56,6 +91,7 @@ export function AssignProgramForm({ programId, athletes, assignedIds }: Props) {
           </button>
         )
       })}
+    </div>
     </div>
   )
 }

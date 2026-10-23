@@ -71,3 +71,30 @@ export async function saveWarmupProgress(athleteId: string, workoutId: string, d
   if (error) return { error: error.message }
   return { ok: true }
 }
+
+/** Athlete (or their coach) rates how hard a workout was: session RPE x minutes = training load */
+export async function saveWorkoutSession(
+  athleteId: string,
+  workoutId: string,
+  data: { rpe: number; minutes: number | null; notes?: string }
+) {
+  const supabase = createClient()
+  const rpe = Math.round(data.rpe)
+  if (!(rpe >= 1 && rpe <= 10)) return { error: 'Pick a number from 1 to 10.' }
+  const minutes = data.minutes != null && data.minutes > 0 ? Math.min(600, Math.round(data.minutes)) : null
+  const { error } = await supabase.from('workout_sessions').upsert(
+    {
+      athlete_id: athleteId,
+      workout_id: workoutId,
+      rpe,
+      minutes,
+      notes: data.notes?.trim() || null,
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: 'athlete_id,workout_id' }
+  )
+  if (error) return { error: error.message }
+  revalidatePath(`/coach/athletes/${athleteId}`)
+  revalidatePath('/coach/reports')
+  return { ok: true }
+}

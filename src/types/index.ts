@@ -133,6 +133,8 @@ export interface Message {
   content: string
   read: boolean
   created_at: string
+  attachment_path?: string | null
+  attachment_type?: string | null
 }
 
 export interface ProgramAssignment {

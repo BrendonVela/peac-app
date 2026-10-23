@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { SwapOptions } from './SwapOptions'
 import { Input, Textarea, Select } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { createExercise, updateExercise, deleteExercise } from '@/app/actions/exercises'
@@ -42,10 +43,16 @@ export default function ExercisesPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [openVideoId, setOpenVideoId] = useState<string | null>(null)
+  const [alts, setAlts] = useState<Record<string, string[]>>({})
 
   function loadExercises() {
     const supabase = createClient()
     supabase.from('exercises').select('*').order('title').then(({ data }) => setExercises(data ?? []))
+    supabase.from('exercise_alternatives').select('exercise_id, alternative_id').then(({ data }) => {
+      const m: Record<string, string[]> = {}
+      ;(data ?? []).forEach((r: any) => { (m[r.exercise_id] ??= []).push(r.alternative_id) })
+      setAlts(m)
+    })
   }
 
   useEffect(() => { loadExercises() }, [])
@@ -178,6 +185,13 @@ export default function ExercisesPage() {
                     </button>
                   </div>
                 </div>
+
+                <SwapOptions
+                  exercise={{ id: ex.id, title: ex.title, category: ex.category }}
+                  all={exercises.map(e => ({ id: e.id, title: e.title, category: e.category }))}
+                  current={alts[ex.id] ?? []}
+                  onSaved={loadExercises}
+                />
 
                 {ex.description && (
                   <p className="text-xs text-zinc-400 line-clamp-2">{ex.description}</p>

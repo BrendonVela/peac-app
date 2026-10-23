@@ -121,7 +121,9 @@ async function requireAdmin() {
 export async function adminDeleteMessage(messageId: string) {
   const ctx = await requireAdmin()
   if ('error' in ctx) return { error: ctx.error }
+  const { data: row } = await ctx.admin.from('messages').select('attachment_path').eq('id', messageId).maybeSingle()
   const { error } = await ctx.admin.from('messages').delete().eq('id', messageId)
+  if (!error && row?.attachment_path) await ctx.admin.storage.from('form-videos').remove([row.attachment_path])
   if (error) return { error: error.message }
   revalidatePath('/coach/messages')
   return { ok: true }
@@ -133,11 +135,50 @@ export async function adminDeleteConversation(otherUserId: string, firstUserId?:
   if ('error' in ctx) return { error: ctx.error }
   const a = firstUserId ?? ctx.user.id
   const b = otherUserId
+  const pair = `and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`
+  const { data: files } = await ctx.admin.from('messages').select('attachment_path').or(pair).not('attachment_path', 'is', null)
+  const paths = (files ?? []).map((f: { attachment_path: string }) => f.attachment_path)
+  if (paths.length) await ctx.admin.storage.from('form-videos').remove(paths)
   const { error } = await ctx.admin
     .from('messages')
     .delete()
     .or(`and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`)
   if (error) return { error: error.message }
   revalidatePath('/coach/messages')
+  return { ok: true }
+}
+
+/** Athlete sends an uploaded form-check video to their coach */
+export async function sendFormVideo(path: string, type: string, exerciseTitle: string, note: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' }
+  if (!path.startsWith(`${user.id}/`)) return { error: 'Invalid upload' }
+
+  const { data: athlete } = await supabase
+    .from('athletes')
+    .select('id, name, coaches(user_id)')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const coachUserId = (athlete as { coaches?: { user_id: string | null } | null } | null)?.coaches?.user_id
+  if (!coachUserId) return { error: 'You need a coach before you can send videos.' }
+
+  const content = `🎥 Form check — ${exerciseTitle}${note.trim() ? `\n${note.trim()}` : ''}`
+  const { error } = await supabase.from('messages').insert({
+    sender_id: user.id,
+    receiver_id: coachUserId,
+    content,
+    attachment_path: path,
+    attachment_type: type,
+  })
+  if (error) return { error: error.message }
+
+  await sendPushToUsers([coachUserId], {
+    title: `${athlete?.name ?? 'Athlete'} sent a form check`,
+    body: exerciseTitle,
+    url: '/coach/messages',
+  })
+  revalidatePath('/coach/messages')
+  revalidatePath('/athlete/messages')
   return { ok: true }
 }

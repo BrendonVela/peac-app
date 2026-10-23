@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ListChecks, Rows3, Footprints, Repeat, CheckCircle2, Flame, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EXERCISE_DONE_EVENT, type ExerciseDoneDetail } from '@/lib/rest'
+import { SessionRpe, type SessionInfo } from './SessionRpe'
 
 export interface GuidedStep {
   key: string
@@ -28,12 +29,20 @@ export function GuidedWorkout({
   cards,
   initialDone,
   warmupDone,
+  athleteId,
+  workoutId,
+  session,
+  backHref = '/athlete/dashboard',
 }: {
   steps: GuidedStep[]
   /** One rendered card per step (same order as steps) */
   cards: React.ReactNode[]
   initialDone: Record<string, boolean>
   warmupDone: boolean
+  athleteId: string
+  workoutId: string
+  session: SessionInfo | null
+  backHref?: string
 }) {
   const [mode, setMode] = useState<'guided' | 'list'>('guided')
   const [done, setDone] = useState<Record<string, boolean>>(initialDone)
@@ -172,9 +181,10 @@ export function GuidedWorkout({
                 {doneEx} of {totalEx} exercises done.
                 {doneEx < totalEx && ' You can go back and finish the rest any time today.'}
               </p>
+              <SessionRpe athleteId={athleteId} workoutId={workoutId} initial={session} />
               <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
                 <button onClick={() => go(index)} className="px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200">Back to workout</button>
-                <Link href="/athlete/dashboard" className="px-4 py-2.5 rounded-lg bg-green-600 text-sm font-medium text-white">Done — go home</Link>
+                <Link href={backHref} className="px-4 py-2.5 rounded-lg bg-green-600 text-sm font-medium text-white">Done — go home</Link>
               </div>
             </div>
           ) : (
@@ -196,6 +206,8 @@ export function GuidedWorkout({
           {cards[i]}
         </div>
       ))}
+
+      {mode === 'list' && <SessionRpe athleteId={athleteId} workoutId={workoutId} initial={session} />}
 
       {/* Back / Next */}
       {mode === 'guided' && !finished && (
