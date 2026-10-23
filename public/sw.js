@@ -21,7 +21,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
 
-  if (url.pathname.startsWith('/_next/static/') || /^\/(icon|apple-icon)/.test(url.pathname) || url.pathname === '/manifest.webmanifest') {
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/mediapipe/') || /^\/(icon|apple-icon)/.test(url.pathname) || url.pathname === '/manifest.webmanifest') {
     event.respondWith(
       caches.open(ASSETS).then(async (c) => {
         const hit = await c.match(req)

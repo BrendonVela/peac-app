@@ -123,7 +123,10 @@ export async function adminDeleteMessage(messageId: string) {
   if ('error' in ctx) return { error: ctx.error }
   const { data: row } = await ctx.admin.from('messages').select('attachment_path').eq('id', messageId).maybeSingle()
   const { error } = await ctx.admin.from('messages').delete().eq('id', messageId)
-  if (!error && row?.attachment_path) await ctx.admin.storage.from('form-videos').remove([row.attachment_path])
+  if (!error && row?.attachment_path) {
+    await ctx.admin.storage.from('form-videos').remove([row.attachment_path])
+    await ctx.admin.from('video_analyses').delete().eq('video_path', row.attachment_path)
+  }
   if (error) return { error: error.message }
   revalidatePath('/coach/messages')
   return { ok: true }
@@ -138,7 +141,10 @@ export async function adminDeleteConversation(otherUserId: string, firstUserId?:
   const pair = `and(sender_id.eq.${a},receiver_id.eq.${b}),and(sender_id.eq.${b},receiver_id.eq.${a})`
   const { data: files } = await ctx.admin.from('messages').select('attachment_path').or(pair).not('attachment_path', 'is', null)
   const paths = (files ?? []).map((f: { attachment_path: string }) => f.attachment_path)
-  if (paths.length) await ctx.admin.storage.from('form-videos').remove(paths)
+  if (paths.length) {
+    await ctx.admin.storage.from('form-videos').remove(paths)
+    await ctx.admin.from('video_analyses').delete().in('video_path', paths)
+  }
   const { error } = await ctx.admin
     .from('messages')
     .delete()

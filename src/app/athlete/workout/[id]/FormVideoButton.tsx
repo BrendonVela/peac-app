@@ -13,6 +13,7 @@ export function FormVideoButton({ exerciseTitle }: { exerciseTitle: string }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
+  const [tips, setTips] = useState(false)
 
   function pick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null
@@ -51,13 +52,28 @@ export function FormVideoButton({ exerciseTitle }: { exerciseTitle: string }) {
     <>
       <input ref={input} type="file" accept="video/*" className="hidden" onChange={pick} />
       <button
-        onClick={() => input.current?.click()}
+        onClick={() => setTips(true)}
         disabled={busy}
         className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 whitespace-nowrap"
         title="Film a set and send it to your coach"
       >
         <Video className="w-4 h-4" /> Form check
       </button>
+      {tips && !file && (
+        <div className="basis-full rounded-lg border border-blue-600/30 bg-blue-600/10 p-3 space-y-2 text-sm text-blue-50">
+          <p className="font-semibold">🎥 Film it so your coach can analyze it</p>
+          <ul className="list-disc pl-5 space-y-0.5 text-xs text-blue-100/90">
+            <li>Phone at hip height, steady (lean it on something), 10–15 ft away.</li>
+            <li>Whole body in the frame, head to feet, good light.</li>
+            <li><b>From the side</b> for squats, deadlifts, lunges, sprints. <b>From the front</b> for knees and landings.</li>
+            <li>One set, about 20–30 seconds. Slow-motion is great for jumps.</li>
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={() => { setTips(false); input.current?.click() }} className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white">Record or choose video</button>
+            <button onClick={() => setTips(false)} className="rounded-md px-3 py-1.5 text-sm text-zinc-300">Cancel</button>
+          </div>
+        </div>
+      )}
       {(file || msg) && (
         <div className="basis-full space-y-2">
           {file && (
