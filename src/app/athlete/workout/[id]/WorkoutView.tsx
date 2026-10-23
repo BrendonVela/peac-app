@@ -11,19 +11,23 @@ import { GuidedWorkout, type GuidedStep } from './GuidedWorkout'
 import { restForExercise, restFromText } from '@/lib/rest'
 
 import { buildSetTargets, formatReps, targetsAreUniform, maxRatio, type AthleteMaxes } from '@/lib/setTargets'
-import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
+import { LIFT_LABEL, scaleLoad, type LiftKey } from '@/lib/maxes'
+import { todayISO } from '@/lib/schedule'
 
 export async function WorkoutView({
   athleteId,
   workoutId,
   backHref = '/athlete/dashboard',
   kiosk = false,
+  weights = 'auto',
 }: {
   athleteId: string
   workoutId: string
   backHref?: string
   /** Weight-room tablet: no form-check uploads */
   kiosk?: boolean
+  /** 'full' = ignore the low-readiness weight drop for this visit */
+  weights?: 'auto' | 'full'
 }) {
   const supabase = createClient()
   const athlete = { id: athleteId }
@@ -111,6 +115,21 @@ export async function WorkoutView({
   const maxes: AthleteMaxes = {}
   ;(maxRows ?? []).forEach((m: any) => { maxes[m.lift as LiftKey] = Number(m.value) })
 
+  // ---------- Readiness: a low check-in today lowers the weights ----------
+  const [{ data: todayCheckIn }, { data: coachRules }] = await Promise.all([
+    supabase.from('check_ins').select('readiness_score').eq('athlete_id', athlete.id).eq('date', todayISO()).maybeSingle(),
+    supabase.from('athletes').select('coaches(readiness_low, readiness_cut, readiness_on)').eq('id', athlete.id).maybeSingle(),
+  ])
+  const rules = (coachRules as any)?.coaches as { readiness_low: number; readiness_cut: number; readiness_on: boolean } | null
+  const readiness = todayCheckIn?.readiness_score != null ? Number(todayCheckIn.readiness_score) : null
+  const lowReadiness = !!rules?.readiness_on && readiness !== null && readiness < Number(rules.readiness_low)
+  const cutPct = Math.min(50, Math.max(0, Number(rules?.readiness_cut ?? 0)))
+  const lighten = lowReadiness && weights !== 'full' && cutPct > 0
+  const targetsFor = (wx: any) => {
+    const t = buildSetTargets(wx, maxes)
+    return lighten ? t.map(x => ({ ...x, weight: scaleLoad(x.weight, 1 - cutPct / 100) })) : t
+  }
+
   const warmup = (workout as any).warmup as { title?: string; items?: string[] } | null
   const warmupItems = Array.isArray(warmup?.items) ? warmup!.items! : []
 
@@ -126,7 +145,7 @@ export async function WorkoutView({
   const renderExercise = (wx: any, i: number, tag: string | null, autoRest = true) => {
     const ex = wx.exercises
     const existing = resultMap.get(wx.id)
-    const targets = buildSetTargets(wx, maxes)
+    const targets = targetsFor(wx)
     const personalized = maxRatio(wx, maxes) !== 1
     const rest = restForExercise(wx)
     const uniform = targetsAreUniform(targets)
@@ -244,7 +263,7 @@ export async function WorkoutView({
         </div>
       )
     } else {
-      const targets = buildSetTargets(wx, maxes)
+      const targets = targetsFor(wx)
       steps.push({
         key: wx.id, kind: 'single', section,
         title: wx.exercises?.title ?? 'Exercise',
@@ -271,6 +290,26 @@ export async function WorkoutView({
           {workout.notes && <p className="text-sm text-zinc-400 mt-0.5">{workout.notes}</p>}
         </div>
       </div>
+
+      {lowReadiness && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <span className="flex-1 min-w-[12rem] text-amber-100">
+            Readiness today is <b>{readiness?.toFixed(1)}/10</b>.{' '}
+            {lighten ? <>Weights are lowered <b>{cutPct}%</b> so you can still train well.</> : <>You&apos;re using full weights.</>}
+          </span>
+          <Link
+            href={lighten ? '?weights=full' : '?'}
+            className="rounded-lg border border-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 hover:text-white"
+          >
+            {lighten ? 'Use full weights' : 'Use lighter weights'}
+          </Link>
+        </div>
+      )}
+      {!kiosk && readiness === null && !!rules?.readiness_on && (
+        <Link href="/athlete/checkin" className="block rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-700">
+          💡 Do today&apos;s <b className="text-white">check-in</b> first — if you&apos;re run down, your weights adjust automatically.
+        </Link>
+      )}
 
       {exercises.length > 0 || warmupItems.length > 0 ? (
         <GuidedWorkout

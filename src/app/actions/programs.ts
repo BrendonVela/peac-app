@@ -135,6 +135,14 @@ export async function unassignProgram(programId: string, athleteId: string) {
 }
 
 export async function deleteProgram(id: string) {
+  {
+    const sb = createClient()
+    const { data: { user } } = await sb.auth.getUser()
+    if (user) {
+      const { data: me } = await sb.from('coaches').select('head_coach_id').eq('user_id', user.id).maybeSingle()
+      if (me?.head_coach_id) return { error: 'Only the head coach can delete programs.' }
+    }
+  }
   const supabase = createClient()
   const { error } = await supabase.from('programs').delete().eq('id', id)
   if (error) return { error: error.message }

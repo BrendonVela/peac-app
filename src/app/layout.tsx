@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { OfflineSupport } from '@/components/OfflineSupport'
 
 export const metadata: Metadata = {
   title: 'PEAC — Performance Training',
@@ -23,7 +24,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <OfflineSupport />
+        {children}
+      </body>
     </html>
   )
 }

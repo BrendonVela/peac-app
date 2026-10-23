@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  LayoutDashboard, TrendingUp, Heart, MessageCircle, Settings, CalendarDays, Trophy,
+  LayoutDashboard, TrendingUp, Heart, MessageCircle, Settings, CalendarDays, Trophy, Timer, ClipboardList,
 } from 'lucide-react'
 import { AppNav, type NavItem } from './AppNav'
 
@@ -12,6 +12,8 @@ const nav: NavItem[] = [
   { href: '/athlete/checkin',   icon: Heart,           label: 'Check-In' },
   { href: '/athlete/messages',  icon: MessageCircle,   label: 'Messages' },
   { href: '/athlete/leaderboard', icon: Trophy,        label: 'Leaderboard' },
+  { href: '/athlete/timer',     icon: Timer,           label: 'Timer' },
+  { href: '/athlete/forms',     icon: ClipboardList,   label: 'Forms' },
   { href: '/athlete/settings',  icon: Settings,        label: 'Settings' },
 ]
 

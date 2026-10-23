@@ -11,6 +11,7 @@ import {
   getAthleteSchedule, formatMonthDay, formatWeekday, formatShortDate,
   STATUS_LABEL, STATUS_BADGE, type ScheduledWorkout,
 } from '@/lib/schedule'
+import { getMyForms } from '@/lib/dueForms'
 
 export default async function AthleteDashboard() {
   const supabase = createClient()
@@ -63,6 +64,8 @@ export default async function AthleteDashboard() {
     .filter(i => i.status === 'missed')
     .sort((a, b) => b.plannedDate.localeCompare(a.plannedDate))
 
+  const { due: dueForms } = await getMyForms(supabase, athlete.id)
+
   return (
     <div className="space-y-6">
       <div>
@@ -73,6 +76,16 @@ export default async function AthleteDashboard() {
           </p>
         )}
       </div>
+
+      {dueForms.length > 0 && (
+        <Link href={dueForms.length === 1 ? `/athlete/forms/${dueForms[0].id}` : '/athlete/forms'} className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <span className="text-xl">📋</span>
+          <span className="flex-1 text-sm text-amber-100">
+            Your coach needs you to fill out <b>{dueForms.length === 1 ? dueForms[0].title : `${dueForms.length} forms`}</b>.
+          </span>
+          <span className="text-xs font-semibold text-amber-300">Open →</span>
+        </Link>
+      )}
 
       {/* Readiness */}
       <Card className={!checkIn ? 'border-yellow-500/30' : ''}>

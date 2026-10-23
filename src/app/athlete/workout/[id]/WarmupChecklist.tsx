@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Check, ChevronDown, Flame } from 'lucide-react'
-import { saveWarmupProgress } from '@/app/actions/workouts'
+import { saveOrQueue } from '@/lib/offlineQueue'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -23,7 +23,7 @@ export function WarmupChecklist({ athleteId, workoutId, title, items, initialDon
     if (next.has(i)) next.delete(i)
     else next.add(i)
     setDone(next)
-    saveWarmupProgress(athleteId, workoutId, Array.from(next).sort((a, b) => a - b))
+    saveOrQueue('saveWarmupProgress', [athleteId, workoutId, Array.from(next).sort((a, b) => a - b)], `${athleteId}:${workoutId}`)
     if (next.size >= items.length) setOpen(false)
   }
 

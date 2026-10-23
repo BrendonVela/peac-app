@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Gauge, Check } from 'lucide-react'
 import { saveWorkoutSession } from '@/app/actions/workouts'
+import { saveOrQueue } from '@/lib/offlineQueue'
 import { cn } from '@/lib/utils'
 
 export interface SessionInfo { rpe: number; minutes: number | null; notes: string | null }
@@ -23,7 +24,12 @@ export function SessionRpe({ athleteId, workoutId, initial }: { athleteId: strin
   async function save() {
     if (!rpe) return
     setSaving(true); setError('')
-    const res = await saveWorkoutSession(athleteId, workoutId, { rpe, minutes: minutes ? Number(minutes) : null, notes })
+    const payload = { rpe, minutes: minutes ? Number(minutes) : null, notes }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await saveOrQueue('saveWorkoutSession', [athleteId, workoutId, payload], `${athleteId}:${workoutId}`)
+      setSaving(false); setSaved(true); return
+    }
+    const res = await saveWorkoutSession(athleteId, workoutId, payload)
     setSaving(false)
     if (res && 'error' in res && res.error) { setError(res.error); return }
     setSaved(true)

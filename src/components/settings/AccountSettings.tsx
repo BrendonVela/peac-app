@@ -17,9 +17,11 @@ interface Props {
   name: string
   role: 'coach' | 'athlete'
   viewingAs: string | null
+  /** Extra coach-only settings cards */
+  extra?: React.ReactNode
 }
 
-export function AccountSettings({ email, name, role, viewingAs }: Props) {
+export function AccountSettings({ email, name, role, viewingAs, extra }: Props) {
   const router = useRouter()
   const [nameValue, setNameValue] = useState(name)
   const [nameMsg, setNameMsg] = useState<{ t: string; ok: boolean } | null>(null)
@@ -149,6 +151,8 @@ export function AccountSettings({ email, name, role, viewingAs }: Props) {
       </Card>
 
       {!viewingAs && <NotificationSettings role={role} />}
+
+      {extra}
 
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Shield className="w-4 h-4 text-blue-400" /> Privacy</CardTitle></CardHeader>

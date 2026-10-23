@@ -42,7 +42,23 @@ export async function getViewAs(supabase: any): Promise<ViewAs | null> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function coachMatch(supabase: any, userId: string): Promise<Record<string, string>> {
   const v = await getViewAs(supabase)
-  return v?.kind === 'coach' ? { id: v.id } : { user_id: userId }
+  if (v?.kind === 'coach') return { id: v.id }
+  // Assistant coaches work on their head coach's team
+  const teamId = await teamCoachIdCached(supabase)
+  return teamId ? { id: teamId } : { user_id: userId }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const teamCoachIdCached = cache(async (supabase: any): Promise<string | null> => {
+  const { data } = await supabase.rpc('get_my_coach_id')
+  return typeof data === 'string' ? data : null
+})
+
+/** The signed-in coach's own row: is this an assistant, and who is their head coach? */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getStaffInfo(supabase: any, userId: string): Promise<{ ownId: string | null; isAssistant: boolean }> {
+  const { data } = await supabase.from('coaches').select('id, head_coach_id').eq('user_id', userId).maybeSingle()
+  return { ownId: data?.id ?? null, isAssistant: !!data?.head_coach_id }
 }
 
 /** Filter for "the current athlete": the viewed athlete for admins, otherwise the signed-in athlete */

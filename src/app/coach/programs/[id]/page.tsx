@@ -9,6 +9,7 @@ import { deleteProgram } from '@/app/actions/programs'
 import { AssignProgramForm } from './AssignProgramForm'
 import { ProgramTools } from './ProgramTools'
 import { EditExerciseButton } from './EditExerciseButton'
+import { ExerciseControls, AddExerciseButton, DayControls, AddDayButton, WeekControls, AddWeekButton } from './EditorControls'
 import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
 import { ExerciseVideo } from '@/components/ExerciseVideo'
 
@@ -19,7 +20,8 @@ function formatReps(reps: string): string {
   return r
 }
 
-export default async function ProgramDetailPage({ params }: { params: { id: string } }) {
+export default async function ProgramDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { edit?: string } }) {
+  const editing = searchParams.edit === '1'
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -47,6 +49,19 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
 
   const assignedIds = new Set(assignments?.map(a => a.athlete_id) ?? [])
 
+  // Most common "written for" max per lift in this program (pre-fills the link form)
+  const refCounts: Record<string, Record<number, number>> = {}
+  ;(blocks ?? []).forEach((b: any) => (b.workouts ?? []).forEach((w: any) => (w.workout_exercises ?? []).forEach((x: any) => {
+    if (x.max_lift && x.ref_max) {
+      const m = (refCounts[x.max_lift] ??= {})
+      m[Number(x.ref_max)] = (m[Number(x.ref_max)] ?? 0) + 1
+    }
+  })))
+  const refs: Record<string, number> = {}
+  Object.entries(refCounts).forEach(([lift, counts]) => {
+    refs[lift] = Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0])
+  })
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
@@ -66,7 +81,22 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
         </form>
       </div>
 
-      <ProgramTools programId={params.id} athletes={(athletes ?? []).map(a => ({ id: a.id, name: a.name }))} />
+      <div className="flex flex-wrap items-center gap-2">
+        <ProgramTools programId={params.id} athletes={(athletes ?? []).map(a => ({ id: a.id, name: a.name }))} />
+        <Link
+          href={editing ? `/coach/programs/${params.id}` : `/coach/programs/${params.id}?edit=1`}
+          className={editing
+            ? 'inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white'
+            : 'inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:text-white'}
+        >
+          {editing ? '✓ Done editing' : '✎ Edit program'}
+        </Link>
+      </div>
+      {editing && (
+        <p className="rounded-lg border border-blue-600/30 bg-blue-600/10 px-3 py-2 text-xs text-blue-100">
+          Edit mode: add, remove and reorder exercises, add days, copy or delete weeks, and edit warm-ups. Changes save as you go and show up for athletes right away.
+        </p>
+      )}
 
       {/* Assign Athletes */}
       <Card>
@@ -97,6 +127,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                 <summary className="flex cursor-pointer select-none list-none items-center gap-3 px-4 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
                   <Badge variant="blue">Week {block.week_number}</Badge>
                   <span className="flex-1 min-w-0 truncate font-semibold text-white">{block.title}</span>
+                  {editing && <WeekControls programId={params.id} blockId={block.id} title={block.title} />}
                   <span className="hidden sm:inline text-xs text-zinc-500">{workouts.length} {workouts.length === 1 ? 'day' : 'days'}</span>
                   <ChevronDown className="w-4 h-4 shrink-0 text-zinc-500 transition-transform group-open:rotate-180" />
                 </summary>
@@ -109,6 +140,7 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                           <div className="flex items-center gap-3 px-4 py-3 bg-zinc-800/30">
                             <span className="text-sm font-semibold text-white">{workout.title}</span>
                             <Badge>Day {wIdx + 1}</Badge>
+                            {editing && <DayControls programId={params.id} workoutId={workout.id} title={workout.title} warmup={workout.warmup ?? null} />}
                           </div>
 
                           {Array.isArray(workout.warmup?.items) && workout.warmup.items.length > 0 && (
@@ -165,7 +197,8 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                                     {wx.exercises?.category && (
                                       <span className="hidden sm:inline"><Badge variant="default">{wx.exercises.category}</Badge></span>
                                     )}
-                                    <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} />
+                                    {editing && <ExerciseControls programId={params.id} wxId={wx.id} first={i === 0} last={i === wxs.length - 1} />}
+                                    <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} refs={refs} />
                                   </div>
                                 </div>
                                 </div>
@@ -174,21 +207,29 @@ export default async function ProgramDetailPage({ params }: { params: { id: stri
                           ) : (
                             <p className="px-4 py-3 text-xs text-zinc-600">No exercises added</p>
                           )}
+                          {editing && (
+                            <div className="border-t border-zinc-800">
+                              <AddExerciseButton programId={params.id} workoutId={workout.id} section={wxs[wxs.length - 1]?.section ?? null} />
+                            </div>
+                          )}
                         </div>
                       )
                     })
                   ) : (
                     <p className="text-sm text-zinc-500">No workouts in this block.</p>
                   )}
+                  {editing && <AddDayButton programId={params.id} blockId={block.id} nextNumber={workouts.length + 1} />}
                 </div>
               </details>
             )
           })}
+          {editing && <AddWeekButton programId={params.id} />}
         </div>
       ) : (
         <Card>
           <CardContent className="py-10 text-center text-sm text-zinc-500">
             No training blocks in this program.
+            {editing && <div className="mt-4"><AddWeekButton programId={params.id} /></div>}
           </CardContent>
         </Card>
       )}

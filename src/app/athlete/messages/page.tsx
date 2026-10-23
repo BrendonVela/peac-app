@@ -13,7 +13,7 @@ import type { Message } from '@/types'
 interface Contact {
   userId: string
   name: string
-  kind: 'coach' | 'admin'
+  kind: 'coach' | 'admin' | 'staff'
   unread: number
 }
 
@@ -44,8 +44,8 @@ export default function AthleteMessagesPage() {
       const coach = (athlete as { coaches?: { user_id: string | null; name: string } | null } | null)?.coaches
       if (coach?.user_id) list.push({ userId: coach.user_id, name: coach.name, kind: 'coach', unread: unreadFrom(coach.user_id) })
       ;((extra ?? []) as { user_id: string; name: string; kind: string }[])
-        .filter(c => c.kind === 'admin' && !list.some(l => l.userId === c.user_id))
-        .forEach(c => list.push({ userId: c.user_id, name: c.name, kind: 'admin', unread: unreadFrom(c.user_id) }))
+        .filter(c => (c.kind === 'admin' || c.kind === 'staff') && !list.some(l => l.userId === c.user_id))
+        .forEach(c => list.push({ userId: c.user_id, name: c.name, kind: c.kind as 'admin' | 'staff', unread: unreadFrom(c.user_id) }))
 
       setContacts(list)
       // Open whichever conversation has something unread, otherwise the coach
@@ -109,7 +109,7 @@ export default function AthleteMessagesPage() {
                 c.userId === selectedId ? 'border-blue-500 bg-blue-600/20 text-white' : 'border-zinc-700 text-zinc-400 hover:text-white'
               )}
             >
-              {c.kind === 'admin' ? 'PEAC Admin' : `Coach ${c.name.split(' ')[0]}`}
+              {c.kind === 'admin' ? 'PEAC Admin' : `${c.kind === 'staff' ? 'Asst. ' : ''}Coach ${c.name.split(' ')[0]}`}
               {c.unread > 0 && (
                 <span className="bg-blue-600 text-white text-[11px] rounded-full min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center">{c.unread}</span>
               )}
@@ -133,7 +133,7 @@ export default function AthleteMessagesPage() {
               )}
               <div>
                 <p className="text-sm font-semibold">{selected.name}</p>
-                <p className="text-xs text-zinc-500">{selected.kind === 'admin' ? 'PEAC Admin' : 'Coach'}</p>
+                <p className="text-xs text-zinc-500">{selected.kind === 'admin' ? 'PEAC Admin' : selected.kind === 'staff' ? 'Assistant coach' : 'Coach'}</p>
               </div>
             </CardHeader>
 

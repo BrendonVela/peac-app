@@ -3,8 +3,7 @@
 import { useState } from 'react'
 import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer, Shuffle } from 'lucide-react'
 import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
-import { logWorkoutResult } from '@/app/actions/workouts'
-import { setWorkoutSwap } from '@/app/actions/swaps'
+import { saveOrQueue } from '@/lib/offlineQueue'
 import { FormVideoButton } from './FormVideoButton'
 import { cn } from '@/lib/utils'
 
@@ -115,6 +114,7 @@ export function WorkoutLogger({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
+  const [offline, setOffline] = useState(false)
 
   const [swapId, setSwapId] = useState<string | null>(initialSwapId)
   const [showSwaps, setShowSwaps] = useState(false)
@@ -126,7 +126,7 @@ export function WorkoutLogger({
     setShowSwaps(false)
     setSwapId(id)
     setShowVideo(false)
-    await setWorkoutSwap(athleteId, workoutId, workoutExerciseId, id)
+    await saveOrQueue('setWorkoutSwap', [athleteId, workoutId, workoutExerciseId, id], `${athleteId}:${workoutExerciseId}`)
   }
 
   const embedUrl = shownVideo ? getYouTubeEmbedUrl(shownVideo) : null
@@ -147,15 +147,16 @@ export function WorkoutLogger({
       .filter(l => l.weight != null || l.reps != null)
       .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0]
 
-    await logWorkoutResult(athleteId, workoutId, workoutExerciseId, {
+    const how = await saveOrQueue('logWorkoutResult', [athleteId, workoutId, workoutExerciseId, {
       weight_used: best?.weight ?? undefined,
       reps_completed: best?.reps ?? undefined,
       completed: isCompleted,
       notes: notes || undefined,
       set_logs: setLogs,
-    })
+    }], `${athleteId}:${workoutExerciseId}`)
     setSaving(false)
     setSaved(true)
+    setOffline(how === 'queued')
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -319,7 +320,7 @@ export function WorkoutLogger({
           disabled={saving}
           className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white hover:border-zinc-600 transition-all whitespace-nowrap"
         >
-          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+          {saving ? 'Saving…' : saved ? (offline ? '✓ Saved on phone' : '✓ Saved') : 'Save'}
         </button>
 
         <button

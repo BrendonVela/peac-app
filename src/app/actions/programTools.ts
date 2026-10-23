@@ -141,24 +141,51 @@ export async function scaleProgramWeights(programId: string, lift: LiftKey | 'al
 export async function updateWorkoutExercise(
   id: string,
   programId: string,
-  data: { sets: string; reps: string; load: string; notes: string }
+  data: { sets: string; reps: string; load: string; notes: string; lift?: string; refMax?: string; applyAll?: boolean }
 ) {
   const supabase = createClient()
-  const sets = parseInt(data.sets, 10)
-  const { error } = await supabase
+  const { data: cur } = await supabase
     .from('workout_exercises')
-    .update({
-      sets: isFinite(sets) && sets > 0 ? sets : null,
-      reps: data.reps.trim() || null,
-      load: data.load.trim() || null,
-      notes: data.notes.trim() || null,
-      // A hand-entered weight is exact: stop scaling it from athlete maxes
-      max_lift: null,
-      ref_max: null,
-      set_targets: null,
-    })
+    .select('exercise_id, sets, reps, load, max_lift, ref_max')
     .eq('id', id)
+    .maybeSingle()
+  if (!cur) return { error: 'Exercise not found' }
+
+  const sets = parseInt(data.sets, 10)
+  const newSets = isFinite(sets) && sets > 0 ? sets : null
+  const newReps = data.reps.trim() || null
+  const newLoad = data.load.trim() || null
+  const prescriptionChanged =
+    String(newSets ?? '') !== String(cur.sets ?? '') || newReps !== (cur.reps ?? null) || newLoad !== (cur.load ?? null)
+
+  const lift = data.lift && ['squat', 'trap_bar_dl', 'db_bench', 'pendlay_row'].includes(data.lift) ? data.lift : null
+  const refNum = Number(String(data.refMax ?? '').replace(/[^\d.]/g, ''))
+  const refMax = lift && refNum > 0 ? refNum : null
+
+  const patch: Record<string, unknown> = { notes: data.notes.trim() || null, max_lift: lift, ref_max: refMax }
+  if (prescriptionChanged) {
+    patch.sets = newSets
+    patch.reps = newReps
+    patch.load = newLoad
+    // Hand-entered numbers replace any per-set targets
+    patch.set_targets = null
+  }
+  const { error } = await supabase.from('workout_exercises').update(patch).eq('id', id)
   if (error) return { error: error.message }
+
+  // Same lift link on this exercise everywhere in the program
+  if (data.applyAll) {
+    const { data: ws } = await supabase.from('workouts').select('id').eq('program_id', programId)
+    const ids = (ws ?? []).map((w: any) => w.id)
+    for (const part of chunk(ids, 100)) {
+      const { error: e2 } = await supabase
+        .from('workout_exercises')
+        .update({ max_lift: lift, ref_max: refMax })
+        .in('workout_id', part)
+        .eq('exercise_id', cur.exercise_id)
+      if (e2) return { error: e2.message }
+    }
+  }
   revalidatePath(`/coach/programs/${programId}`)
   return { ok: true }
 }

@@ -14,14 +14,14 @@ calendar, messaging + announcements, push notifications, sign-up codes, admin to
 - [x] Weight-room screen (kiosk) — tablet on the wall, tap name, log
 
 ## Medium value
-- Program builder in the app (add days, copy weeks, drag exercises)
-- Import from PDF / whiteboard photo (AI)
-- Readiness-based adjustments (low check-in -> lighter weights)
-- Linked maxes (front squat = % of back squat)
-- Custom forms / questionnaires
-- Interval timers (EMOM, Tabata, sprints)
-- Works offline
-- Assistant coaches / staff roles
+- [x] Program builder in the app (add days, copy weeks, drag exercises)
+- [x] Import from PDF / whiteboard photo (AI)
+- [x] Readiness-based adjustments (low check-in -> lighter weights)
+- [x] Linked maxes (front squat = % of back squat)
+- [x] Custom forms / questionnaires
+- [x] Interval timers (EMOM, Tabata, sprints)
+- [x] Works offline
+- [x] Assistant coaches / staff roles
 
 ## Business & bigger projects
 - Sell programs / marketplace + payments

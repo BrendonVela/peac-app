@@ -115,6 +115,7 @@ export function GuidedWorkout({
             <Rows3 className="w-3.5 h-3.5" /> Full list
           </button>
         </div>
+        {!backHref.startsWith('/kiosk') && <Link href="/athlete/timer" className="text-xs text-zinc-400 hover:text-white">⏱ Timer</Link>}
         {mode === 'guided' && (
           <button onClick={() => setShowList(v => !v)} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
             <ListChecks className="w-4 h-4" /> {showList ? 'Hide' : 'All exercises'}

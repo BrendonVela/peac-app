@@ -7,9 +7,10 @@ import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
 import { importProgramFromExcel } from '@/app/actions/importProgram'
+import { ImportDocument } from './ImportDocument'
 
 // Big Excel imports can take a while
-export const maxDuration = 60
+export const maxDuration = 300
 
 export default async function ProgramsPage() {
   const supabase = createClient()
@@ -56,6 +57,8 @@ export default async function ProgramsPage() {
           Import
         </Button>
       </form>
+
+      <ImportDocument />
 
       {programs && programs.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

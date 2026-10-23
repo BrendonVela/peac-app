@@ -59,7 +59,8 @@ export default function CoachMessagesPage() {
       setMyUserId(user.id)
       supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
 
-      const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user.id).single()
+      const { data: teamId } = await supabase.rpc('get_my_coach_id')
+      const coach = teamId ? { id: teamId as string } : null
       if (!coach) { setLoaded(true); return }
 
       const [{ data: athletes }, { data: contacts }] = await Promise.all([
@@ -80,7 +81,7 @@ export default function CoachMessagesPage() {
         byId.set(c.user_id, {
           userId: c.user_id,
           name: c.name,
-          subtitle: c.kind === 'admin' ? 'Admin · Support' : c.kind === 'coach' ? 'Coach' : c.detail,
+          subtitle: c.kind === 'admin' ? 'Admin · Support' : c.kind === 'coach' ? (c.detail ?? 'Coach') : c.detail,
           kind: c.kind,
         })
       })

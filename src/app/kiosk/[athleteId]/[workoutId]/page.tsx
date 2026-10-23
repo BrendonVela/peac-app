@@ -7,7 +7,7 @@ import { IdleReturn } from '../../KioskBits'
 
 export const dynamic = 'force-dynamic'
 
-export default async function KioskWorkout({ params }: { params: { athleteId: string; workoutId: string } }) {
+export default async function KioskWorkout({ params, searchParams }: { params: { athleteId: string; workoutId: string }; searchParams: { weights?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -26,7 +26,7 @@ export default async function KioskWorkout({ params }: { params: { athleteId: st
         <p className="text-sm text-blue-100">Logging for <b>{athlete.name}</b></p>
         <Link href="/kiosk" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Done — next athlete</Link>
       </div>
-      <WorkoutView athleteId={athlete.id} workoutId={params.workoutId} backHref={`/kiosk/${athlete.id}`} kiosk />
+      <WorkoutView athleteId={athlete.id} workoutId={params.workoutId} backHref={`/kiosk/${athlete.id}`} kiosk weights={searchParams.weights === 'full' ? 'full' : 'auto'} />
     </div>
   )
 }
