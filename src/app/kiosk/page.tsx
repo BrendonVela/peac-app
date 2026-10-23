@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { coachMatch } from '@/lib/acting'
-import { getAthleteSchedule, todayISO, calendarDate } from '@/lib/schedule'
+import { getTeamSchedules, todayISO, calendarDate, type AthleteSchedule } from '@/lib/schedule'
 import { AthleteTiles, HoldToExit } from './KioskBits'
 
 export const dynamic = 'force-dynamic'
@@ -16,9 +16,11 @@ export default async function KioskHome() {
 
   const { data: athletes } = await supabase.from('athletes').select('id, name').eq('coach_id', coach.id).order('name')
   const today = todayISO()
+  const roster = (athletes ?? []) as { id: string; name: string }[]
+  const team = await getTeamSchedules(supabase, roster.map(a => a.id)).catch(() => new Map<string, AthleteSchedule>())
   const list = await Promise.all(
-    ((athletes ?? []) as { id: string; name: string }[]).map(async a => {
-      const s = await getAthleteSchedule(supabase, a.id).catch(() => null)
+    roster.map(async a => {
+      const s = team.get(a.id) ?? null
       const count = (s?.items ?? []).filter(it => calendarDate(it) === today || (it.plannedDate === today && it.status !== 'done')).length
       return { id: a.id, name: a.name, today: count }
     })

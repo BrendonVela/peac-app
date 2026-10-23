@@ -13,7 +13,7 @@ calendar, messaging + announcements, push notifications, sign-up codes, admin to
 - [x] Athlete video uploads — film a set, send to coach for form check
 - [x] Weight-room screen (kiosk) — tablet on the wall, tap name, log
 
-## Medium value
+## Medium value (done Oct 2026)
 - [x] Program builder in the app (add days, copy weeks, drag exercises)
 - [x] Import from PDF / whiteboard photo (AI)
 - [x] Readiness-based adjustments (low check-in -> lighter weights)
@@ -33,3 +33,14 @@ calendar, messaging + announcements, push notifications, sign-up codes, admin to
 
 Sources: bridgeathletic.com/strength-coach, trainheroic.com/strength-coach-platform,
 us.fitgap.com/products/trainheroic, scienceforsport.com (TeamBuildr)
+
+## To do — set up later
+- [ ] Turn on PDF / photo import (button already in Programs; shows "not set up" until a key is added)
+  - Option A (paid): Anthropic key — console.anthropic.com -> Billing (add credit) -> API Keys -> Create Key,
+    then Vercel -> Settings -> Environments -> Production -> Add variable (Secret) ANTHROPIC_API_KEY, then redeploy.
+  - Option B (free tier, limits): switch importer to Google Gemini (aistudio.google.com key). Free-tier data may be
+    used by Google to improve products; check current limits first. Ask Claude to add this.
+  - Free workaround now: Excel 365 Data -> Get Data -> From PDF, save as .xlsx, use Excel import; or build with Edit program.
+- [ ] Apple Developer account ($99/yr) + Mac/cloud Mac for App Store (see docs/APP_STORE.md)
+- [ ] Native iPhone push (APNs) once wrapped for the App Store
+

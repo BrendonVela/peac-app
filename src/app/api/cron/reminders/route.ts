@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAthleteSchedule } from '@/lib/schedule'
+import { getTeamSchedules } from '@/lib/schedule'
 import { sendPushToUsers, pushIsConfigured } from '@/lib/push'
 
 export const dynamic = 'force-dynamic'
@@ -25,9 +25,11 @@ export async function GET(request: Request) {
   const { data: athletes } = await admin.from('athletes').select('id, user_id, name').in('user_id', userIds)
 
   let sent = 0
+  const team = await getTeamSchedules(admin, (athletes ?? []).map((a: { id: string }) => a.id))
   for (const athlete of athletes ?? []) {
     try {
-      const schedule = await getAthleteSchedule(admin, athlete.id)
+      const schedule = team.get(athlete.id)
+      if (!schedule) continue
       const todays = schedule.items.filter(i => i.plannedDate === schedule.today && i.status !== 'done')
       if (todays.length === 0) continue
       const first = todays[0]

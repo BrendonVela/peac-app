@@ -1,3 +1,4 @@
+import { fetchAll, chunk } from './fetchAll'
 // src/lib/schedule.ts
 // Week-based scheduling for assigned programs.
 //
@@ -124,29 +125,22 @@ export const STATUS_BADGE: Record<WorkoutStatus, 'green' | 'blue' | 'default' | 
   missed: 'red',
 }
 
-/** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getAthleteSchedule(supabase: any, athleteId: string): Promise<AthleteSchedule> {
-  const today = todayISO()
+type Row = any
 
-  const [assignmentsRes, resultsRes, overridesRes] = await Promise.all([
-    supabase
-      .from('program_assignments')
-      .select('id, program_id, assigned_at, start_date, programs(id, title, training_blocks(id, week_number, order, workouts(id, title, day_of_week, workout_exercises(id))))')
-      .eq('athlete_id', athleteId),
-    supabase
-      .from('workout_results')
-      .select('workout_id, workout_exercise_id, completed, logged_at')
-      .eq('athlete_id', athleteId),
-    supabase
-      .from('workout_schedule')
-      .select('workout_id, scheduled_date')
-      .eq('athlete_id', athleteId),
-  ])
+const PROGRAM_TREE = 'id, title, training_blocks(id, week_number, order, workouts(id, title, day_of_week, workout_exercises(id)))'
 
+/** Turn one athlete's assignments, logged results and moved dates into their schedule */
+function buildSchedule(
+  today: string,
+  assignmentRows: Row[],
+  programsById: Map<string, Row>,
+  results: Row[],
+  overrideRows: Row[]
+): AthleteSchedule {
   // Exercise completion: workout_exercise_id -> latest completed timestamp
   const completedAt = new Map<string, string>()
-  for (const r of (resultsRes.data ?? []) as any[]) {
+  for (const r of results) {
     if (r.completed && r.workout_exercise_id) {
       const prev = completedAt.get(r.workout_exercise_id)
       if (!prev || r.logged_at > prev) completedAt.set(r.workout_exercise_id, r.logged_at)
@@ -155,15 +149,13 @@ export async function getAthleteSchedule(supabase: any, athleteId: string): Prom
 
   // Per-athlete date overrides (table may not exist yet -> ignore errors)
   const overrides = new Map<string, string>()
-  if (!overridesRes.error) {
-    for (const o of (overridesRes.data ?? []) as any[]) overrides.set(o.workout_id, o.scheduled_date)
-  }
+  for (const o of overrideRows) overrides.set(o.workout_id, o.scheduled_date)
 
   const assignments: AssignmentInfo[] = []
   const items: ScheduledWorkout[] = []
 
-  for (const a of (assignmentsRes.data ?? []) as any[]) {
-    const program = a.programs
+  for (const a of assignmentRows) {
+    const program = programsById.get(a.program_id)
     if (!program) continue
 
     const startDate: string = a.start_date ?? (a.assigned_at ? toLocalISO(a.assigned_at) : today)
@@ -245,6 +237,61 @@ export async function getAthleteSchedule(supabase: any, athleteId: string): Prom
   }
 
   return { today, assignments, items }
+}
+
+/** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getAthleteSchedule(supabase: any, athleteId: string): Promise<AthleteSchedule> {
+  const map = await getTeamSchedules(supabase, [athleteId])
+  return map.get(athleteId) ?? { today: todayISO(), assignments: [], items: [] }
+}
+
+/**
+ * Schedules for many athletes in a few requests (instead of a few requests per athlete).
+ * Returns athleteId -> schedule.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getTeamSchedules(supabase: any, athleteIds: string[]): Promise<Map<string, AthleteSchedule>> {
+  const today = todayISO()
+  const out = new Map<string, AthleteSchedule>()
+  const ids = Array.from(new Set(athleteIds.filter(Boolean)))
+  if (ids.length === 0) return out
+
+  const assignments: Row[] = []
+  const results: Row[] = []
+  const overrides: Row[] = []
+  for (const part of chunk(ids, 100)) {
+    const [a, r, o] = await Promise.all([
+      fetchAll<Row>((from, to) =>
+        supabase.from('program_assignments').select('id, athlete_id, program_id, assigned_at, start_date').in('athlete_id', part).range(from, to)),
+      fetchAll<Row>((from, to) =>
+        supabase.from('workout_results').select('athlete_id, workout_id, workout_exercise_id, completed, logged_at').in('athlete_id', part).order('logged_at').range(from, to)),
+      fetchAll<Row>((from, to) =>
+        supabase.from('workout_schedule').select('athlete_id, workout_id, scheduled_date').in('athlete_id', part).range(from, to)),
+    ])
+    assignments.push(...a.data)
+    results.push(...r.data)
+    if (!o.error) overrides.push(...o.data) // table may not exist yet
+  }
+
+  // Each program's weeks/days once, shared by everyone on it
+  const programsById = new Map<string, Row>()
+  const programIds = Array.from(new Set(assignments.map(a => a.program_id).filter(Boolean)))
+  for (const part of chunk(programIds, 20)) {
+    const { data } = await supabase.from('programs').select(PROGRAM_TREE).in('id', part)
+    for (const p of (data ?? []) as Row[]) programsById.set(p.id, p)
+  }
+
+  const group = (rows: Row[]) => {
+    const m = new Map<string, Row[]>()
+    for (const r of rows) { const l = m.get(r.athlete_id) ?? []; l.push(r); m.set(r.athlete_id, l) }
+    return m
+  }
+  const aBy = group(assignments), rBy = group(results), oBy = group(overrides)
+  for (const id of ids) {
+    out.set(id, buildSchedule(today, aBy.get(id) ?? [], programsById, rBy.get(id) ?? [], oBy.get(id) ?? []))
+  }
+  return out
 }
 
 /** The date a workout shows on in the calendar */

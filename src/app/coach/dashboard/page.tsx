@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { getReadinessBadge, getReadinessLabel, cn } from '@/lib/utils'
 import {
-  getAthleteSchedule, todayISO, startOfWeek, addDays,
+  getTeamSchedules, todayISO, startOfWeek, addDays,
   formatMonthDay, formatWeekday, formatShortDate,
   type ScheduledWorkout,
 } from '@/lib/schedule'
@@ -54,7 +54,7 @@ export default async function CoachDashboard() {
     athleteIds.length > 0
       ? supabase.from('check_ins').select('athlete_id, readiness_score').eq('date', today).in('athlete_id', athleteIds)
       : Promise.resolve({ data: [] as { athlete_id: string; readiness_score: number }[] }),
-    Promise.all(athleteIds.map(id => getAthleteSchedule(supabase, id))),
+    getTeamSchedules(supabase, athleteIds).then(m => athleteIds.map(id => m.get(id)!)),
   ])
 
   const readinessById = new Map<string, number>()

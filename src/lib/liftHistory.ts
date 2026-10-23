@@ -1,6 +1,7 @@
 // Main-lift history from logged sets: estimated max per workout, best sets and PRs.
 
 import { toLocalISO } from './schedule'
+import { fetchAll } from './fetchAll'
 import { LIFTS, liftForExercise, type LiftKey } from './maxes'
 
 export interface LiftPoint {
@@ -31,12 +32,13 @@ export function estimateMax(weight: number, reps: number): number {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getLiftHistory(supabase: any, athleteId: string): Promise<LiftSummary[]> {
   const [{ data: results }, { data: maxRows }] = await Promise.all([
-    supabase
-      .from('workout_results')
-      .select('workout_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
-      .eq('athlete_id', athleteId)
-      .order('logged_at', { ascending: true })
-      .limit(2000),
+    fetchAll<any>((from, to) =>
+      supabase
+        .from('workout_results')
+        .select('workout_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
+        .eq('athlete_id', athleteId)
+        .order('logged_at', { ascending: true })
+        .range(from, to), 1000, 10000),
     supabase.from('athlete_maxes').select('lift, value').eq('athlete_id', athleteId),
   ])
 

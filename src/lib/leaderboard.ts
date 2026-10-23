@@ -5,6 +5,7 @@ import { LIFTS, liftForExercise, type LiftKey } from './maxes'
 import { estimateMax } from './liftHistory'
 import { TEST_META } from './utils'
 import { toLocalISO } from './schedule'
+import { fetchAll } from './fetchAll'
 import type { TestType } from '@/types'
 
 export type MetricKey = LiftKey | Exclude<TestType, 'body_weight'>
@@ -40,12 +41,13 @@ export async function getTeamBoard(admin: any, coachId: string) {
   const [{ data: maxRows }, { data: tests }, { data: results }] = await Promise.all([
     admin.from('athlete_maxes').select('athlete_id, lift, value, updated_at').in('athlete_id', ids),
     admin.from('performance_tests').select('athlete_id, test_type, result, date').in('athlete_id', ids),
-    admin
-      .from('workout_results')
-      .select('athlete_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
-      .in('athlete_id', ids)
-      .order('logged_at', { ascending: false })
-      .limit(5000),
+    fetchAll<any>((from, to) =>
+      admin
+        .from('workout_results')
+        .select('athlete_id, set_logs, weight_used, reps_completed, logged_at, workout_exercises(max_lift, exercises(title))')
+        .in('athlete_id', ids)
+        .order('logged_at', { ascending: false })
+        .range(from, to), 1000, 20000),
   ])
 
   // athlete -> lift -> best

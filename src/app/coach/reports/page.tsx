@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { coachMatch } from '@/lib/acting'
-import { getAthleteSchedule, todayISO, addDays, toLocalISO } from '@/lib/schedule'
+import { getTeamSchedules, todayISO, addDays, toLocalISO, type AthleteSchedule } from '@/lib/schedule'
+import { fetchAll } from '@/lib/fetchAll'
 import { sessionLoad } from '@/lib/load'
 import { ReportView, type ReportRow } from './ReportView'
 
@@ -33,14 +34,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: { da
     ? await Promise.all([
         supabase.from('check_ins').select('athlete_id, date, readiness_score').in('athlete_id', ids).gte('date', from),
         supabase.from('workout_sessions').select('athlete_id, rpe, minutes, completed_at').in('athlete_id', ids).gte('completed_at', `${from}T00:00:00`),
-        supabase.from('workout_results').select('athlete_id, logged_at').in('athlete_id', ids).order('logged_at', { ascending: false }).limit(2000),
+        fetchAll<any>((from, to) => supabase.from('workout_results').select('athlete_id, logged_at').in('athlete_id', ids).order('logged_at', { ascending: false }).range(from, to), 1000, 20000),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }]
 
   const lastActive = new Map<string, string>()
   ;(lastLogs ?? []).forEach((r: any) => { if (!lastActive.has(r.athlete_id)) lastActive.set(r.athlete_id, toLocalISO(r.logged_at)) })
 
-  const schedules = await Promise.all(list.map(a => getAthleteSchedule(supabase, a.id).catch(() => null)))
+  const teamSchedules = await getTeamSchedules(supabase, ids).catch(() => new Map<string, AthleteSchedule>())
+  const schedules = list.map(a => teamSchedules.get(a.id) ?? null)
 
   const rows: ReportRow[] = list.map((a, i) => {
     const sched = schedules[i]
