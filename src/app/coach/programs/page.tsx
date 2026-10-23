@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
 import { importProgramFromExcel } from '@/app/actions/importProgram'
 import { ImportDocument } from './ImportDocument'
+import { UseTemplateButton, TemplateOwnerButtons } from './TemplateButtons'
+import { LayoutTemplate } from 'lucide-react'
 
 // Big Excel imports can take a while
 export const maxDuration = 300
@@ -23,18 +25,26 @@ export default async function ProgramsPage() {
     .match(await coachMatch(supabase, user.id))
     .single()
 
-  const { data: programs } = await supabase
+  // Programs vs. templates (falls back to the old list if the template columns aren't set up yet)
+  let { data: all, error: listErr } = await supabase
     .from('programs')
-    .select('id, title, description, created_at')
-    .eq('coach_id', coach?.id ?? '')
+    .select('id, title, description, created_at, is_template, is_public_template, coach_id')
+    .or(`coach_id.eq.${coach?.id ?? '00000000-0000-0000-0000-000000000000'},is_public_template.eq.true`)
     .order('created_at', { ascending: false })
+  if (listErr) {
+    const r = await supabase.from('programs').select('id, title, description, created_at, coach_id').eq('coach_id', coach?.id ?? '').order('created_at', { ascending: false })
+    all = (r.data ?? []).map((p: any) => ({ ...p, is_template: false, is_public_template: false }))
+  }
+  const programs = (all ?? []).filter((p: any) => !p.is_template && p.coach_id === coach?.id)
+  const templates = (all ?? []).filter((p: any) => p.is_template)
+  const { data: isAdmin } = await supabase.rpc('is_admin')
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Programs</h1>
-          <p className="text-zinc-400 text-sm mt-0.5">{programs?.length ?? 0} total</p>
+          <p className="text-zinc-400 text-sm mt-0.5">{programs.length} total</p>
         </div>
         <Link href="/coach/programs/new">
           <Button size="sm">
@@ -60,9 +70,46 @@ export default async function ProgramsPage() {
 
       <ImportDocument />
 
-      {programs && programs.length > 0 ? (
+      {/* Templates */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <LayoutTemplate className="w-4 h-4 text-violet-300" />
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">Templates</h2>
+          <span className="text-xs text-zinc-500">· start a new program in one tap</span>
+        </div>
+        {templates.length === 0 ? (
+          <p className="text-sm text-zinc-500">No templates yet. Open any program and tap <b>Save as template</b>.</p>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {templates.map((t: any) => {
+              const mine = t.coach_id === coach?.id
+              return (
+                <Link key={t.id} href={`/coach/programs/${t.id}`}>
+                  <Card className="h-full border-violet-600/30 hover:border-violet-500/60 transition-colors">
+                    <CardContent className="py-4 flex flex-col gap-2 h-full">
+                      <div className="flex items-start gap-2">
+                        <p className="flex-1 font-semibold text-white">{t.title}</p>
+                        {(mine || isAdmin === true) && <TemplateOwnerButtons templateId={t.id} shared={!!t.is_public_template} isAdmin={isAdmin === true} canDelete={mine || isAdmin === true} />}
+                      </div>
+                      {t.description && <p className="text-xs text-zinc-400 line-clamp-2">{t.description}</p>}
+                      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+                        <span className="text-[11px] text-zinc-500">{t.is_public_template ? 'PEAC template' : 'Your template'}</span>
+                        <UseTemplateButton templateId={t.id} title={t.title} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300 pt-2">Your programs</h2>
+
+      {programs.length > 0 ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {programs.map(program => (
+          {programs.map((program: any) => (
             <Link key={program.id} href={`/coach/programs/${program.id}`}>
               <Card className="hover:border-zinc-700 transition-colors cursor-pointer h-full">
                 <CardContent className="py-5 flex flex-col gap-3">

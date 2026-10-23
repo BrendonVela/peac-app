@@ -9,6 +9,7 @@ import { deleteProgram } from '@/app/actions/programs'
 import { AssignProgramForm } from './AssignProgramForm'
 import { ProgramTools } from './ProgramTools'
 import { EditExerciseButton } from './EditExerciseButton'
+import { SaveAsTemplateButton, UseTemplateButton, TemplateOwnerButtons } from '../TemplateButtons'
 import { ExerciseControls, AddExerciseButton, DayControls, AddDayButton, WeekControls, AddWeekButton } from './EditorControls'
 import { LIFT_LABEL, type LiftKey } from '@/lib/maxes'
 import { ExerciseVideo } from '@/components/ExerciseVideo'
@@ -21,7 +22,7 @@ function formatReps(reps: string): string {
 }
 
 export default async function ProgramDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { edit?: string } }) {
-  const editing = searchParams.edit === '1'
+  const editRequested = searchParams.edit === '1'
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -48,6 +49,11 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
   ])
 
   const assignedIds = new Set(assignments?.map(a => a.athlete_id) ?? [])
+  const isTemplate = !!(program as any).is_template
+  const { data: isAdminFlag } = await supabase.rpc('is_admin')
+  const isAdmin = isAdminFlag === true
+  const ownsProgram = program.coach_id === coach.id
+  const editing = editRequested && ownsProgram
 
   // Most common "written for" max per lift in this program (pre-fills the link form)
   const refCounts: Record<string, Record<number, number>> = {}
@@ -74,15 +80,17 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
             <p className="text-sm text-zinc-400 mt-1">{program.description}</p>
           )}
         </div>
-        <form action={deleteProgram.bind(null, params.id) as unknown as (formData: FormData) => void}>
+        {ownsProgram && <form action={deleteProgram.bind(null, params.id) as unknown as (formData: FormData) => void}>
           <button type="submit" className="text-zinc-600 hover:text-red-400 transition-colors p-1" title="Delete program">
             <Trash2 className="w-4 h-4" />
           </button>
-        </form>
+        </form>}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <ProgramTools programId={params.id} athletes={(athletes ?? []).map(a => ({ id: a.id, name: a.name }))} />
+        {!isTemplate && <ProgramTools programId={params.id} athletes={(athletes ?? []).map(a => ({ id: a.id, name: a.name }))} />}
+        {!isTemplate && <SaveAsTemplateButton programId={params.id} title={program.title} isAdmin={isAdmin} />}
+        {ownsProgram && (
         <Link
           href={editing ? `/coach/programs/${params.id}` : `/coach/programs/${params.id}?edit=1`}
           className={editing
@@ -91,6 +99,7 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
         >
           {editing ? '✓ Done editing' : '✎ Edit program'}
         </Link>
+        )}
       </div>
       {editing && (
         <p className="rounded-lg border border-blue-600/30 bg-blue-600/10 px-3 py-2 text-xs text-blue-100">
@@ -98,8 +107,18 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
         </p>
       )}
 
+      {isTemplate && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-violet-600/40 bg-violet-600/10 px-4 py-3">
+          <p className="flex-1 min-w-[12rem] text-sm text-violet-100">
+            This is a <b>template</b>{(program as any).is_public_template ? ' shared with every coach' : ''}. Make your own copy to assign it to athletes.
+          </p>
+          {(ownsProgram || isAdmin) && <TemplateOwnerButtons templateId={params.id} shared={!!(program as any).is_public_template} isAdmin={isAdmin} canDelete={ownsProgram || isAdmin} />}
+          <UseTemplateButton templateId={params.id} title={program.title} big />
+        </div>
+      )}
+
       {/* Assign Athletes */}
-      <Card>
+      {!isTemplate && <Card>
         <CardHeader>
           <CardTitle>Assigned Athletes</CardTitle>
         </CardHeader>
@@ -110,7 +129,7 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
             assignedIds={Array.from(assignedIds)}
           />
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Training Blocks */}
       {blocks && blocks.length > 0 ? (
@@ -198,7 +217,7 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
                                       <span className="hidden sm:inline"><Badge variant="default">{wx.exercises.category}</Badge></span>
                                     )}
                                     {editing && <ExerciseControls programId={params.id} wxId={wx.id} first={i === 0} last={i === wxs.length - 1} />}
-                                    <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} refs={refs} />
+                                    {ownsProgram && <EditExerciseButton programId={params.id} wx={wx} title={wx.exercises?.title ?? 'Exercise'} refs={refs} />}
                                   </div>
                                 </div>
                                 </div>

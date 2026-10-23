@@ -28,8 +28,8 @@ calendar, messaging + announcements, push notifications, sign-up codes, admin to
 - Nutrition (meal plans, food log, macros)
 - Education content
 - Device connections (VALD, GymAware, wearables)
-- Custom branding per coach
-- Templates library
+- [x] Custom branding per coach
+- [x] Templates library
 
 Sources: bridgeathletic.com/strength-coach, trainheroic.com/strength-coach-platform,
 us.fitgap.com/products/trainheroic, scienceforsport.com (TeamBuildr)

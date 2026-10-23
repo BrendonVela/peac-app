@@ -13,7 +13,24 @@ export type NavItem = { href: string; icon: LucideIcon; label: string; short?: s
  * Desktop: left sidebar with every item.
  * Phone: slim top bar + bottom tab bar (first 4 `tabs`) + a "More" sheet with everything else.
  */
-export function AppNav({ items, tabs }: { items: NavItem[]; tabs: string[] }) {
+export interface NavBrand { name: string | null; logoUrl: string | null }
+
+function Logo({ brand, size }: { brand?: NavBrand | null; size: 'sm' | 'lg' }) {
+  const box = size === 'lg' ? 'h-8 max-w-[7rem]' : 'h-7 max-w-[6rem]'
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      {brand?.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={brand.logoUrl} alt="" className={`${box} w-auto object-contain`} />
+      ) : (
+        <Zap className={size === 'lg' ? 'w-6 h-6 text-blue-500 fill-blue-500' : 'w-5 h-5 text-blue-500 fill-blue-500'} />
+      )}
+      <span className={`${size === 'lg' ? 'text-lg' : 'text-base'} font-bold tracking-tight truncate`}>{brand?.name || 'PEAC'}</span>
+    </div>
+  )
+}
+
+export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: string[]; brand?: NavBrand | null }) {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
 
@@ -29,9 +46,8 @@ export function AppNav({ items, tabs }: { items: NavItem[]; tabs: string[] }) {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col fixed inset-y-0 left-0 w-60 bg-zinc-950 border-r border-zinc-800 z-40">
-        <div className="flex items-center gap-2.5 px-6 h-16 border-b border-zinc-800 shrink-0">
-          <Zap className="w-6 h-6 text-blue-500 fill-blue-500" />
-          <span className="text-lg font-bold tracking-tight">PEAC</span>
+        <div className="flex items-center px-6 h-16 border-b border-zinc-800 shrink-0">
+          <Logo brand={brand} size="lg" />
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
@@ -51,6 +67,7 @@ export function AppNav({ items, tabs }: { items: NavItem[]; tabs: string[] }) {
         </nav>
 
         <div className="px-3 py-4 border-t border-zinc-800 shrink-0">
+          {brand && <p className="px-3 pb-2 text-[10px] uppercase tracking-wider text-zinc-600">Powered by PEAC</p>}
           <form action={signOut}>
             <button
               type="submit"
@@ -65,10 +82,7 @@ export function AppNav({ items, tabs }: { items: NavItem[]; tabs: string[] }) {
 
       {/* Phone: top bar */}
       <header className="mobile-header md:hidden fixed top-0 inset-x-0 bg-zinc-950/95 backdrop-blur border-b border-zinc-800 z-40 flex items-center px-4">
-        <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-blue-500 fill-blue-500" />
-          <span className="text-base font-bold">PEAC</span>
-        </div>
+        <Logo brand={brand} size="sm" />
       </header>
 
       {/* Phone: "More" sheet */}

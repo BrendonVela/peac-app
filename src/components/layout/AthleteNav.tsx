@@ -3,7 +3,7 @@
 import {
   LayoutDashboard, TrendingUp, Heart, MessageCircle, Settings, CalendarDays, Trophy, Timer, ClipboardList,
 } from 'lucide-react'
-import { AppNav, type NavItem } from './AppNav'
+import { AppNav, type NavItem, type NavBrand } from './AppNav'
 
 const nav: NavItem[] = [
   { href: '/athlete/dashboard', icon: LayoutDashboard, label: 'Dashboard', short: 'Home' },
@@ -17,9 +17,10 @@ const nav: NavItem[] = [
   { href: '/athlete/settings',  icon: Settings,        label: 'Settings' },
 ]
 
-export function AthleteNav() {
+export function AthleteNav({ brand = null }: { brand?: NavBrand | null }) {
   return (
     <AppNav
+      brand={brand}
       items={nav}
       tabs={['/athlete/dashboard', '/athlete/calendar', '/athlete/checkin', '/athlete/messages']}
     />

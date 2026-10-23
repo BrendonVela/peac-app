@@ -3,15 +3,18 @@ import { Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { JoinForm } from './JoinForm'
 import { JoinButton } from './JoinButton'
+import { brandFromRow, brandStyle } from '@/lib/brand'
 
 export default async function JoinPage({ params }: { params: { code: string } }) {
   const code = decodeURIComponent(params.code).trim().toUpperCase()
   const supabase = createClient()
 
-  const [{ data: coachName }, { data: { user } }] = await Promise.all([
+  const [{ data: coachName }, { data: { user } }, { data: brandRows }] = await Promise.all([
     supabase.rpc('coach_name_for_code', { code }),
     supabase.auth.getUser(),
+    supabase.rpc('coach_brand_for_code', { code }),
   ])
+  const brand = brandFromRow(Array.isArray(brandRows) ? brandRows[0] : null)
 
   let content: React.ReactNode
 
@@ -56,11 +59,16 @@ export default async function JoinPage({ params }: { params: { code: string } })
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-950">
+    <div className={`min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-950 ${brand?.color ? 'branded' : ''}`} style={brandStyle(brand)}>
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2.5 mb-10">
-          <Zap className="w-8 h-8 text-blue-500 fill-blue-500" />
-          <span className="text-2xl font-bold tracking-tight">PEAC</span>
+          {brand?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logoUrl} alt="" className="h-12 w-auto max-w-[10rem] object-contain" />
+          ) : (
+            <Zap className="w-8 h-8 text-blue-500 fill-blue-500" />
+          )}
+          <span className="text-2xl font-bold tracking-tight">{brand?.name || 'PEAC'}</span>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">{content}</div>
         {!user && coachName && (

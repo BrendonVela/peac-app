@@ -79,6 +79,16 @@ html {
   bottom: env(safe-area-inset-bottom) !important;
 }
 
+/* Coach branding: swap PEAC blue for the coach's color */
+.branded .bg-blue-600 { background-color: var(--brand) !important; }
+.branded .hover\:bg-blue-700:hover { background-color: var(--brand) !important; filter: brightness(0.9); }
+.branded .text-blue-400, .branded .text-blue-300 { color: var(--brand-text) !important; }
+.branded .border-blue-500, .branded .border-blue-600 { border-color: var(--brand) !important; }
+.branded .bg-blue-500 { background-color: var(--brand) !important; }
+.branded .text-blue-500 { color: var(--brand) !important; }
+.branded .fill-blue-500 { fill: var(--brand) !important; }
+.branded .file\:bg-blue-600::file-selector-button { background-color: var(--brand) !important; }
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;

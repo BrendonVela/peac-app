@@ -44,7 +44,8 @@ export default async function CoachDashboard() {
 
   const [{ data: athletes }, { data: programs }] = await Promise.all([
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id).order('name'),
-    supabase.from('programs').select('id, title').eq('coach_id', coach.id).order('created_at', { ascending: false }),
+    supabase.from('programs').select('*').eq('coach_id', coach.id).order('created_at', { ascending: false })
+      .then((r: any) => ({ ...r, data: (r.data ?? []).filter((p: any) => !p.is_template) })),
   ])
 
   const athleteList = (athletes ?? []) as { id: string; name: string; sport: string | null }[]
