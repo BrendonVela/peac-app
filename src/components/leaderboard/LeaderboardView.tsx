@@ -90,7 +90,7 @@ export function LeaderboardView({
       </Card>
 
       {/* Metric picker */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+      <div className="flex flex-wrap gap-2">
         {metrics.map(m => (
           <button
             key={m.key}

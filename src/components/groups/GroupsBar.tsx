@@ -99,7 +99,7 @@ export function GroupsBar({ athletes, selected, onSelect, onGroups, readOnly = f
 
   return (
     <>
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+      <div className="flex items-center gap-2 flex-wrap">
         <Users className="w-4 h-4 text-zinc-500 shrink-0" />
         <button className={chip(selected === null)} onClick={() => onSelect(null)}>All</button>
         {groups.map(g => (

@@ -100,7 +100,7 @@ export default function AthleteMessagesPage() {
       <h1 className="text-2xl font-bold">Messages</h1>
 
       {contacts.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-wrap gap-2">
           {contacts.map(c => (
             <button
               key={c.userId}
