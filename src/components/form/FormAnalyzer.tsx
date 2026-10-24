@@ -1,14 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText, ZoomIn, ZoomOut, Crosshair, EyeOff, RotateCcw } from 'lucide-react'
+import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText, ZoomIn, ZoomOut, Crosshair, EyeOff, RotateCcw, Move, Box } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { saveVideoAnalysis, saveVideoNotes, sendVideoReview } from '@/app/actions/videoAnalysis'
-import { drawStroke, notesAt, PEN_COLORS, POINT_COLORS, POINT_IDEAS, parseAnnotations, pointAt, setKey, type CustomPoint, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
+import { drawStroke, notesAt, PEN_COLORS, POINT_COLORS, POINT_IDEAS, parseAnnotations, pointAt, setKey, type CustomAngle, type CustomPoint, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
 import type { Message } from '@/types'
 import { extractPose, loadPoseEngine } from '@/lib/pose/engine'
 import {
-  analyze, frameAngles, pt, BONES, EXERCISE_LABEL, guessExercise, ANGLE_INFO, ANGLE_KEYS, angleLabel, JOINT_NAMES,
+  analyze, frameAngles, pt, wpt, angle3D, has3D, BONES, EXERCISE_LABEL, guessExercise, ANGLE_INFO, ANGLE_KEYS, angleLabel, JOINT_NAMES,
   type AnalysisResult, type Angles, type AngleKey, type ExerciseKind, type JointName, type PoseFrame, type View,
 } from '@/lib/pose/analysis'
 import { cn } from '@/lib/utils'
@@ -68,8 +68,14 @@ function frameAt(frames: PoseFrame[], t: number): PoseFrame | null {
       if (!pa || !pb) return pa ?? pb
       return [pa[0] + (pb[0] - pa[0]) * k, pa[1] + (pb[1] - pa[1]) * k, Math.min(pa[2], pb[2])] as [number, number, number]
     }),
+    w: a.w && b.w ? a.w.map((wa, i) => {
+      const wb = b.w![i]
+      if (!wa || !wb) return wa ?? wb ?? null
+      return [wa[0] + (wb[0] - wa[0]) * k, wa[1] + (wb[1] - wa[1]) * k, wa[2] + (wb[2] - wa[2]) * k] as [number, number, number]
+    }) : a.w,
   }
 }
+const ANGLE_COLORS = ['#facc15', '#f472b6', '#4ade80', '#60a5fa', '#fb923c']
 
 export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   src: string
@@ -129,6 +135,17 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   const placingRef = useRef<string | null>(null)
   placingRef.current = placing
   const [menu, setMenu] = useState<TapMenu>(null)
+  const [angles, setAngles] = useState<CustomAngle[]>([])
+  const anglesRef = useRef<CustomAngle[]>([])
+  anglesRef.current = angles
+  const [picking, setPicking] = useState<string[] | null>(null) // building a custom angle: refs tapped so far
+  const pickingRef = useRef<string[] | null>(null)
+  pickingRef.current = picking
+  const [fixing, setFixing] = useState<JointName | null>(null)   // moving a body point on this frame
+  const [use3d, setUse3d] = useState(true)
+  const use3dRef = useRef(true)
+  use3dRef.current = use3d
+  const [best, setBest] = useState(true)
   const loadedNotes = useRef(false)
   const lastSaved = useRef('')
   // Zoom: scale + offset of the video inside its box
@@ -150,8 +167,8 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
         if (!alive) return
         const ann = parseAnnotations(data?.annotations)
         const saved = [...ann.notes, ...ann.points]
-        setNotes(ann.notes); setPoints(ann.points); setHidden(new Set(ann.hidden as JointName[]))
-        lastSaved.current = JSON.stringify({ v: 2, notes: ann.notes, points: ann.points, hidden: ann.hidden })
+        setNotes(ann.notes); setPoints(ann.points); setHidden(new Set(ann.hidden as JointName[])); setAngles(ann.angles ?? [])
+        lastSaved.current = JSON.stringify({ v: 2, notes: ann.notes, points: ann.points, hidden: ann.hidden, angles: ann.angles ?? [] })
         loadedNotes.current = true
         if (data?.frames?.length) {
           setExercise(data.exercise as ExerciseKind)
@@ -171,12 +188,13 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   }, [path])
 
   const analysis = useMemo(
-    () => (frames.length ? analyze(frames, exercise, view, aspect, duration || frames[frames.length - 1].t) : null),
-    [frames, exercise, view, aspect, duration]
+    () => (frames.length ? analyze(frames, exercise, view, aspect, duration || frames[frames.length - 1].t, use3d) : null),
+    [frames, exercise, view, aspect, duration, use3d]
   )
 
   // New exercise / camera view -> start from that exercise's usual markers
   const side = analysis?.result.side
+  const is3D = useMemo(() => has3D(frames), [frames])
   useEffect(() => { setShown(defaultShown(exercise, view, side)); setGraphKey('auto') }, [exercise, view, side])
 
   function toggleAngle(k: AngleKey) {
@@ -275,6 +293,67 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
+  // ---------- References to points ('joint:rElbow' or 'pt:<id>') ----------
+  function refPos(ref: string, f: PoseFrame | null, t: number): { x: number; y: number } | null {
+    if (ref.startsWith('joint:')) {
+      const j = ref.slice(6) as JointName
+      if (!f || hidden.has(j)) return null
+      const q = pt(f, j)
+      return q && q.v >= 0.35 ? { x: q.x, y: q.y } : null
+    }
+    const other = pointsRef.current.find(p => p.id === ref.slice(3))
+    return other ? pointAt(other, t) : null
+  }
+  /** Angle at the middle point. Uses 3D when all three are body points and 3D is on. */
+  function refAngle(refs: string[], f: PoseFrame | null, va: number, t: number): { v: number; d3: boolean } | null {
+    if (use3dRef.current && f?.w && refs.every(x => x.startsWith('joint:'))) {
+      const [a, b, c] = refs.map(x => wpt(f, x.slice(6) as JointName))
+      const v = angle3D(a, b, c)
+      if (v != null) return { v, d3: true }
+    }
+    const [a, b, c] = refs.map(x => refPos(x, f, t))
+    if (!a || !b || !c) return null
+    const ax = (a.x - b.x) * va, ay = a.y - b.y, cx = (c.x - b.x) * va, cy = c.y - b.y
+    const d = Math.hypot(ax, ay) * Math.hypot(cx, cy)
+    if (!d) return null
+    return { v: (Math.acos(Math.max(-1, Math.min(1, (ax * cx + ay * cy) / d))) * 180) / Math.PI, d3: false }
+  }
+  /** A drawn angle whose 3 taps all snapped to body points -> its real 3D angle at that moment */
+  function stroke3D(s: Stroke, t: number): number | null {
+    if (!use3dRef.current || !s.refs || s.refs.length < 3 || s.refs.some(x => !x || !x.startsWith('joint:'))) return null
+    const f = frameAt(frames, t)
+    if (!f?.w) return null
+    const [a, b, c] = s.refs.slice(0, 3).map(x => wpt(f, x!.slice(6) as JointName))
+    return angle3D(a, b, c)
+  }
+  /** Closest body point or your point to a spot on screen (within `max` px) */
+  function nearestRef(x: number, y: number, max = 30): string | null {
+    const r = videoRect(), video = videoRef.current
+    if (!r || !video) return null
+    const t = video.currentTime
+    let best: string | null = null, bestD = max
+    for (const p of pointsRef.current) {
+      const q = pointAt(p, t); if (!q) continue
+      const d = Math.hypot(r.ox + q.x * r.dw - x, r.oy + q.y * r.dh - y)
+      if (d < bestD) { bestD = d; best = `pt:${p.id}` }
+    }
+    const f = frameAt(frames, t)
+    if (f) {
+      for (const j of JOINT_NAMES) {
+        if (hidden.has(j)) continue
+        const q = pt(f, j); if (!q || q.v < 0.35) continue
+        const d = Math.hypot(r.ox + q.x * r.dw - x, r.oy + q.y * r.dh - y)
+        if (d < bestD) { bestD = d; best = `joint:${j}` }
+      }
+    }
+    return best
+  }
+  const refName = (ref: string) => ref.startsWith('joint:') ? JOINT_LABEL[ref.slice(6) as JointName] : points.find(p => p.id === ref.slice(3))?.name ?? 'Point'
+  function startAngle() {
+    videoRef.current?.pause(); setPlaying(false)
+    setPlacing(null); setFixing(null); setDrawMode(false); setPicking([])
+  }
+
   // ---------- Points ----------
   function addPoint(name: string) {
     const p: CustomPoint = { id: newId(), name, color: POINT_COLORS[points.length % POINT_COLORS.length], keys: [], link: /bat|club|racket/i.test(name) && frames.length ? 'joint:rHand' : null }
@@ -309,6 +388,36 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     const { x, y } = local(e)
     const t = video.currentTime
     if (menu) { setMenu(null); return }
+    if (pickingRef.current) {
+      const ref = nearestRef(x, y, 40)
+      if (!ref) { setFlash('Tap right on a point'); return }
+      if (pickingRef.current.includes(ref)) { setFlash('Pick a different point'); return }
+      const next = [...pickingRef.current, ref]
+      if (next.length === 3) {
+        setAngles(as => [...as, { id: newId(), refs: next as [string, string, string], color: ANGLE_COLORS[as.length % ANGLE_COLORS.length] }])
+        setPicking(null)
+        setFlash('Angle added')
+      } else setPicking(next)
+      return
+    }
+    if (fixing) {
+      const nx = (x - r.ox) / r.dw, ny = (y - r.oy) / r.dh
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return
+      const ji = JOINT_NAMES.indexOf(fixing)
+      setFrames(fs => {
+        if (!fs.length) return fs
+        let k = 0
+        for (let i = 1; i < fs.length; i++) if (Math.abs(fs[i].t - t) < Math.abs(fs[k].t - t)) k = i
+        const copy = fs.slice()
+        const fr = { ...copy[k], p: copy[k].p.slice(), w: copy[k].w?.slice() }
+        fr.p[ji] = [Math.round(nx * 1000) / 1000, Math.round(ny * 1000) / 1000, 1]
+        if (fr.w) fr.w[ji] = null // 3D for this spot isn't known any more — that frame uses the flat angle
+        copy[k] = fr
+        return copy
+      })
+      setFlash(`${JOINT_LABEL[fixing]} moved on this frame`)
+      return
+    }
     if (placingRef.current) {
       const nx = (x - r.ox) / r.dw, ny = (y - r.oy) / r.dh
       if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return
@@ -363,8 +472,9 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       })
       setAspect(v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 9 / 16)
       setDuration(v.duration)
-      const fps = v.duration > 40 ? 8 : v.duration > 20 ? 10 : 15
-      const out = await extractPose(v, { fps, onProgress: setProgress, signal: cancel.current })
+      // Best: every frame (30/s) with the bigger model — follows fast swings much better
+      const fps = best ? (v.duration > 30 ? 10 : v.duration > 15 ? 15 : 30) : (v.duration > 40 ? 8 : v.duration > 20 ? 10 : 15)
+      const out = await extractPose(v, { fps, best, onProgress: setProgress, signal: cancel.current })
       if (cancel.current.cancelled) return
       setFrames(out)
       setPhase('ready')
@@ -421,7 +531,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       ctx.beginPath(); ctx.arc(A.x, A.y, 3.2, 0, Math.PI * 2); ctx.fill()
     }
     // Angle labels next to the joints
-    const ang = frameAngles(hidden.size ? { t: f.t, p: f.p.map((q, i) => (hidden.has(JOINT_NAMES[i]) ? null : q)) } : f, va)
+    const ang = frameAngles(hidden.size ? { t: f.t, p: f.p.map((q, i) => (hidden.has(JOINT_NAMES[i]) ? null : q)), w: f.w } : f, va, use3dRef.current)
     ctx.font = '600 12px Inter, system-ui, sans-serif'
     for (const key of ANGLE_KEYS) {
       if (!shown.has(key)) continue
@@ -448,10 +558,36 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     }
     }
     // Coach drawings: the draft while drawing, otherwise the notes at this moment
-    const strokes = drawModeRef.current
-      ? [...draft.current, ...(inProgress.current ? [inProgress.current] : [])]
-      : notesAt(notesRef.current, video.currentTime).flatMap(n => n.strokes)
-    for (const s of strokes) drawStroke(ctx, s, r)
+    const strokes: { s: Stroke; t: number }[] = drawModeRef.current
+      ? [...draft.current, ...(inProgress.current ? [inProgress.current] : [])].map(s => ({ s, t: video.currentTime }))
+      : notesAt(notesRef.current, video.currentTime).flatMap(n => n.strokes.map(s => ({ s, t: n.t })))
+    for (const { s, t: st } of strokes) drawStroke(ctx, s, r, s.tool === 'angle' && s.pts.length >= 3 ? stroke3D(s, st) : null)
+
+    // Your 3-point angles, followed through the video
+    for (const a of anglesRef.current) {
+      const P3 = a.refs.map(ref => refPos(ref, f, video.currentTime))
+      if (P3.some(q => !q)) continue
+      const S = P3.map(q => ({ x: r.ox + q!.x * r.dw, y: r.oy + q!.y * r.dh }))
+      ctx.save()
+      ctx.strokeStyle = a.color; ctx.lineWidth = 3; ctx.setLineDash([7, 5]); ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y); ctx.lineTo(S[1].x, S[1].y); ctx.lineTo(S[2].x, S[2].y); ctx.stroke()
+      ctx.setLineDash([])
+      const deg = refAngle(a.refs, f, va, video.currentTime)
+      if (deg) {
+        const text = `${Math.round(deg.v)}°${deg.d3 ? ' 3D' : ''}`
+        ctx.font = '700 14px Inter, system-ui, sans-serif'
+        const w = ctx.measureText(text).width + 12
+        ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(S[1].x + 10, S[1].y + 6, w, 22)
+        ctx.fillStyle = a.color; ctx.fillText(text, S[1].x + 16, S[1].y + 22)
+      }
+      ctx.restore()
+    }
+    // Points tapped so far while building an angle
+    for (const ref of pickingRef.current ?? []) {
+      const q = refPos(ref, f, video.currentTime); if (!q) continue
+      ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3
+      ctx.beginPath(); ctx.arc(r.ox + q.x * r.dw, r.oy + q.y * r.dh, 13, 0, Math.PI * 2); ctx.stroke()
+    }
 
     // Your points (bat, ball…) with an optional line + angle to another point
     const t = video.currentTime
@@ -515,13 +651,23 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     const b = box.getBoundingClientRect()
     return [(e.clientX - b.left - r.ox) / r.dw, (e.clientY - b.top - r.oy) / r.dh]
   }
+  /** Snap a tap onto a nearby body point / your point (so angles and lines land exactly on the joint) */
+  function snap(e: React.PointerEvent, p: [number, number]): { p: [number, number]; ref: string | null } {
+    const { x, y } = local(e)
+    const ref = nearestRef(x, y, 26)
+    const t = videoRef.current?.currentTime ?? 0
+    const q = ref ? refPos(ref, frameAt(frames, t), t) : null
+    return q ? { p: [q.x, q.y], ref } : { p, ref: null }
+  }
   function penDown(e: React.PointerEvent) {
     e.preventDefault()
-    const p = toNorm(e); if (!p) return
+    const raw = toNorm(e); if (!raw) return
+    const snapped = tool === 'angle' || tool === 'line' || tool === 'arrow' ? snap(e, raw) : { p: raw, ref: null }
+    const p = snapped.p
     if (tool === 'angle') {
       const cur = inProgress.current
-      if (cur && cur.tool === 'angle' && cur.pts.length < 3) cur.pts.push(p)
-      else inProgress.current = { tool: 'angle', color, pts: [p] }
+      if (cur && cur.tool === 'angle' && cur.pts.length < 3) { cur.pts.push(p); cur.refs = [...(cur.refs ?? []), snapped.ref] }
+      else inProgress.current = { tool: 'angle', color, pts: [p], refs: [snapped.ref] }
       if (inProgress.current!.pts.length === 3) { draft.current.push(inProgress.current!); inProgress.current = null }
       setDraftVer(v => v + 1)
       return
@@ -534,7 +680,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     if (!cur || cur.tool === 'angle') return
     const p = toNorm(e); if (!p) return
     if (cur.tool === 'pen') cur.pts.push(p)
-    else cur.pts = [cur.pts[0], p]
+    else cur.pts = [cur.pts[0], cur.tool === 'circle' ? p : snap(e, p).p]
   }
   function penUp() {
     const cur = inProgress.current
@@ -559,7 +705,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   // Save notes + your points + removed points a moment after any change
   useEffect(() => {
     if (!loadedNotes.current || !canSave) return
-    const data = { v: 2 as const, notes, points, hidden: Array.from(hidden) }
+    const data = { v: 2 as const, notes, points, hidden: Array.from(hidden), angles }
     const json = JSON.stringify(data)
     if (json === lastSaved.current) return
     setNotesMsg('Saving…')
@@ -569,7 +715,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       setNotesMsg(r && 'error' in r && r.error ? `Not saved: ${r.error}` : '✓ Saved')
     }, 800)
     return () => clearTimeout(tm)
-  }, [notes, points, hidden, canSave, path])
+  }, [notes, points, hidden, angles, canSave, path])
   function saveNote() {
     const strokes = draft.current.slice()
     if (!strokes.length && !noteText.trim()) { setDrawMode(false); return }
@@ -656,6 +802,10 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
             <button onClick={run} className="w-full rounded-xl bg-blue-600 py-3.5 text-base font-semibold text-white">
               🦴 Analyze form
             </button>
+            <div className="flex rounded-xl border border-zinc-700 overflow-hidden text-sm">
+              <button onClick={() => setBest(true)} className={cn('flex-1 py-2.5', best ? 'bg-zinc-700 text-white font-semibold' : 'text-zinc-400')}>Best tracking (slower)</button>
+              <button onClick={() => setBest(false)} className={cn('flex-1 py-2.5', !best ? 'bg-zinc-700 text-white font-semibold' : 'text-zinc-400')}>Quick</button>
+            </div>
             <button onClick={() => setPhase('ready')} className="w-full rounded-xl border border-zinc-700 py-3 text-sm font-medium text-zinc-200">
               ✏️ Just draw &amp; add notes (skip body tracking)
             </button>
@@ -703,8 +853,9 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
               <div className="absolute left-2 top-2 flex gap-2 text-[10px] font-semibold">
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.L }}>● Left</span>
                 <span className="rounded bg-black/70 px-1.5 py-0.5" style={{ color: COLORS.R }}>● Right</span>
+                {is3D && use3d && <span className="rounded bg-black/70 px-1.5 py-0.5 text-emerald-300">3D angles</span>}
               </div>
-              {flash && <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">{flash}</div>}
+              {flash && <div className="absolute left-1/2 top-11 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">{flash}</div>}
               {!drawMode && !placing && frames.length > 0 && showingNotes.length === 0 && <p className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">Tap a point for options · pinch or + to zoom</p>}
               {showingNotes.some(n => n.text) && (
                 <div className="absolute inset-x-2 bottom-2 space-y-1">
@@ -731,6 +882,30 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                 <button onClick={() => zoomBy(1.5)} disabled={zoom >= 6} className="w-8 h-8 rounded-lg bg-black/70 text-white flex items-center justify-center disabled:opacity-40" aria-label="Zoom in"><ZoomIn className="w-4 h-4" /></button>
                 {zoom > 1.01 && <button onClick={() => applyZoom(1, 0, 0)} className="h-8 rounded-lg bg-black/70 px-2 text-[11px] font-semibold text-white">{zoom.toFixed(1)}× ✕</button>}
               </div>
+              {/* Building an angle */}
+              {picking && (
+                <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/85 p-2.5 text-xs text-white space-y-1.5" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                  <p className="font-semibold text-yellow-300">
+                    {picking.length === 0 ? 'Tap 1 of 3: one end (e.g. right shoulder)' : picking.length === 1 ? 'Tap 2 of 3: the joint in the middle (e.g. right elbow)' : 'Tap 3 of 3: the other end (e.g. right hand)'}
+                  </p>
+                  {picking.length > 0 && <p className="text-zinc-300">{picking.map(refName).join(' → ')}</p>}
+                  <div className="flex gap-2">
+                    {picking.length > 0 && <button onClick={() => setPicking(picking.slice(0, -1))} className="rounded bg-zinc-700 px-2.5 py-1">Undo</button>}
+                    <button onClick={() => setPicking(null)} className="ml-auto rounded bg-zinc-700 px-3 py-1">Cancel</button>
+                  </div>
+                </div>
+              )}
+              {fixing && (
+                <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/85 p-2.5 text-xs text-white space-y-1.5" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+                  <p className="font-semibold text-sky-300">Fixing: {JOINT_LABEL[fixing]}</p>
+                  <p className="text-zinc-300">Tap where it really is. Step with ‹ › and tap again to fix other frames. Zoom in for accuracy.</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => step(-1)} className="rounded bg-zinc-700 px-2.5 py-1">‹</button>
+                    <button onClick={() => step(1)} className="rounded bg-zinc-700 px-2.5 py-1">›</button>
+                    <button onClick={() => setFixing(null)} className="ml-auto rounded bg-blue-600 px-3 py-1 font-semibold">Done</button>
+                  </div>
+                </div>
+              )}
               {/* Placing your point */}
               {placing && (() => {
                 const p = points.find(x => x.id === placing)
@@ -761,6 +936,8 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                       <>
                         <p className="px-2 py-1 text-[11px] font-semibold text-zinc-400">{JOINT_LABEL[j]}</p>
                         {k && <button onClick={() => { toggleAngle(k); setMenu(null) }} className="w-full rounded-lg px-2 py-2 text-left text-white hover:bg-zinc-800">{shown.has(k) ? 'Hide' : 'Show'} {angleLabel(k).toLowerCase()} angle</button>}
+                        <button onClick={() => { setFixing(j); setPlacing(null); setPicking(null); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-white hover:bg-zinc-800"><Move className="w-4 h-4" /> Fix its spot</button>
+                        <button onClick={() => { startAngle(); setPicking([`joint:${j}`]); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-white hover:bg-zinc-800"><Triangle className="w-4 h-4" /> Start an angle here</button>
                         <button onClick={() => { removeJoint(j); setMenu(null) }} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-red-300 hover:bg-zinc-800"><EyeOff className="w-4 h-4" /> Remove this point</button>
                       </>
                     )
@@ -841,6 +1018,25 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                     ))}
                   </ul>
                 )}
+                <div className="border-t border-zinc-800 pt-2.5 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-zinc-300">Angles from 3 points</span>
+                    <button onClick={startAngle} className="ml-auto rounded-lg bg-yellow-400 px-3 py-1.5 text-xs font-bold text-black">+ Pick 3 points</button>
+                  </div>
+                  {angles.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500">Example: right shoulder → right elbow → right hand shows the elbow bend all the way through the video. Works with your own points too (hand → bat tip).</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {angles.map(a => (
+                        <li key={a.id} className="flex items-center gap-2 text-sm">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ background: a.color }} />
+                          <span className="flex-1 text-zinc-200 text-xs">{a.refs.map(refName).join(' → ')}</span>
+                          <button onClick={() => setAngles(as => as.filter(x => x.id !== a.id))} className="p-1 text-zinc-500 hover:text-red-400" aria-label="Delete angle"><Trash2 className="w-4 h-4" /></button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 {hidden.size > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-800 pt-2">
                     <span className="text-[11px] text-zinc-500">Removed:</span>
@@ -872,7 +1068,13 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                   <button onClick={undo} className="ml-auto flex items-center gap-1 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300"><Undo2 className="w-3.5 h-3.5" /> Undo</button>
                   <button onClick={() => { draft.current = []; inProgress.current = null; setDraftVer(v => v + 1) }} className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300">Clear</button>
                 </div>
-                {tool === 'angle' && <p className="text-[11px] text-zinc-400">Angle: tap 3 spots — one end, the corner, the other end.</p>}
+                {tool === 'angle' && (
+                  <p className="text-[12px] font-medium text-yellow-300">
+                    {(() => { const n = inProgress.current?.tool === 'angle' ? inProgress.current.pts.length : 0; void draftVer
+                      return n === 0 ? 'Angle — tap 1 of 3: one end (e.g. shoulder)' : n === 1 ? 'Tap 2 of 3: the joint in the middle (e.g. elbow)' : 'Tap 3 of 3: the other end (e.g. hand)' })()}
+                    <span className="block text-[11px] font-normal text-zinc-400">Taps near a body point snap onto it. If all 3 are body points, it shows the 3D angle.</span>
+                  </p>
+                )}
                 <textarea
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
@@ -937,11 +1139,16 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
               <button onClick={run} className="w-full rounded-xl border border-zinc-700 py-2.5 text-sm text-zinc-200">🦴 Add body tracking (skeleton + angles)</button>
             )}
 
+            {frames.length > 0 && !is3D && (
+              <p className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-400">This video was analyzed before 3D angles and hand points were added. Tap <b>Analyze again</b> at the bottom (Best tracking) to get them.</p>
+            )}
+
             {/* Markers: turn anything on or off */}
             {frames.length > 0 && <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
                 <SlidersHorizontal className="w-4 h-4 text-blue-400" /> Markers
                 <div className="ml-auto flex gap-1.5">
+                  {is3D && <Toggle on={use3d} onClick={() => setUse3d(b => !b)}>3D angles</Toggle>}
                   <Toggle on={showBones} onClick={() => setShowBones(b => !b)}>Skeleton</Toggle>
                   <Toggle on={showPoints} onClick={() => setShowPoints(b => !b)}>Points</Toggle>
                 </div>

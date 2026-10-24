@@ -12,6 +12,7 @@ type PoseEngine = any
 
 let enginePromise: Promise<PoseEngine> | null = null
 let resolver: ((r: any) => void) | null = null
+let currentComplexity = 1
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -66,12 +67,18 @@ function seek(video: HTMLVideoElement, t: number): Promise<void> {
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 const r2 = (n: number) => Math.round(n * 100) / 100
 
-/** Step through the video and find the body in each frame */
+/** Step through the video and find the body in each frame.
+ *  best = the larger, more accurate model (slower). Each frame also gets 3D points (meters, centered on the hips). */
 export async function extractPose(
   video: HTMLVideoElement,
-  opts: { fps?: number; onProgress?: (share: number) => void; signal?: { cancelled: boolean } } = {}
+  opts: { fps?: number; best?: boolean; onProgress?: (share: number) => void; signal?: { cancelled: boolean } } = {}
 ): Promise<PoseFrame[]> {
   const pose = await loadPoseEngine()
+  const complexity = opts.best ? 2 : 1
+  if (complexity !== currentComplexity) {
+    pose.setOptions({ modelComplexity: complexity })
+    currentComplexity = complexity
+  }
   pose.reset?.()
   const fps = opts.fps ?? 15
   const duration = video.duration
@@ -84,12 +91,17 @@ export async function extractPose(
     await seek(video, t)
     const res = await detect(pose, video)
     const lm = res?.poseLandmarks as { x: number; y: number; visibility?: number }[] | undefined
+    const wl = res?.poseWorldLandmarks as { x: number; y: number; z: number }[] | undefined
     frames.push({
       t: r3(t),
       p: JOINT_NAMES.map(n => {
         const p = lm?.[JOINTS[n]]
         return p ? [r3(p.x), r3(p.y), r2(p.visibility ?? 0)] as [number, number, number] : null
       }),
+      w: wl ? JOINT_NAMES.map(n => {
+        const q = wl[JOINTS[n]]
+        return q ? [r3(q.x), r3(q.y), r3(q.z)] as [number, number, number] : null
+      }) : undefined,
     })
     opts.onProgress?.(i / steps)
   }

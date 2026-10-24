@@ -2,7 +2,11 @@
 // Points are stored 0..1 across the video picture, so they line up on any screen size.
 
 export type Tool = 'pen' | 'line' | 'arrow' | 'circle' | 'angle'
-export interface Stroke { tool: Tool; color: string; pts: [number, number][] }
+export interface Stroke {
+  tool: Tool; color: string; pts: [number, number][]
+  /** For the angle tool: which body point each tap snapped to ('joint:rElbow'), so it can use the 3D angle */
+  refs?: (string | null)[]
+}
 export interface VideoNote { id: string; t: number; text: string; strokes: Stroke[]; by?: string }
 
 export const PEN_COLORS = ['#facc15', '#ef4444', '#22c55e', '#ffffff', '#38bdf8']
@@ -18,7 +22,7 @@ function angleAt(a: [number, number], b: [number, number], c: [number, number], 
   return (Math.acos(Math.max(-1, Math.min(1, (ax * cx + ay * cy) / d))) * 180) / Math.PI
 }
 
-export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect) {
+export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect, deg3d?: number | null) {
   const X = (p: [number, number]) => r.ox + p[0] * r.dw
   const Y = (p: [number, number]) => r.oy + p[1] * r.dh
   ctx.save()
@@ -57,9 +61,9 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect) {
     ctx.stroke()
     for (const q of p.slice(0, 3)) { ctx.beginPath(); ctx.arc(X(q), Y(q), 4, 0, Math.PI * 2); ctx.fill() }
     if (p.length >= 3) {
-      const deg = angleAt(p[0], p[1], p[2], r.va)
+      const deg = deg3d ?? angleAt(p[0], p[1], p[2], r.va)
       if (deg != null) {
-        const text = `${Math.round(deg)}°`
+        const text = `${Math.round(deg)}°${deg3d != null ? ' 3D' : ''}`
         ctx.shadowBlur = 0
         ctx.font = '700 14px Inter, system-ui, sans-serif'
         const w = ctx.measureText(text).width + 12
@@ -87,16 +91,18 @@ export interface CustomPoint {
   keys: PointKey[]          // sorted by time
   link: string | null       // 'joint:rHand' or 'pt:<id>' — draws a line to it and shows its angle
 }
-export interface Annotations { v: 2; notes: VideoNote[]; points: CustomPoint[]; hidden: string[] }
+/** An angle you pick from any 3 points (body or your own), followed through the whole video */
+export interface CustomAngle { id: string; refs: [string, string, string]; color: string }
+export interface Annotations { v: 2; notes: VideoNote[]; points: CustomPoint[]; hidden: string[]; angles?: CustomAngle[] }
 
 export const POINT_COLORS = ['#e879f9', '#a3e635', '#fb7185', '#2dd4bf', '#fde047']
 export const POINT_IDEAS = ['Bat tip', 'Bat knob', 'Ball', 'Club head', 'Barbell', 'Racket']
 
 /** Read what's saved (older saves were just a list of notes) */
 export function parseAnnotations(raw: unknown): Annotations {
-  if (Array.isArray(raw)) return { v: 2, notes: raw as VideoNote[], points: [], hidden: [] }
+  if (Array.isArray(raw)) return { v: 2, notes: raw as VideoNote[], points: [], hidden: [], angles: [] }
   const o = (raw ?? {}) as Partial<Annotations>
-  return { v: 2, notes: o.notes ?? [], points: o.points ?? [], hidden: o.hidden ?? [] }
+  return { v: 2, notes: o.notes ?? [], points: o.points ?? [], hidden: o.hidden ?? [], angles: o.angles ?? [] }
 }
 
 /** Where a point is at time t (0..1 across the picture), or null if it isn't placed around then */

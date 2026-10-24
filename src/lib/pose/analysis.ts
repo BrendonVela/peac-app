@@ -34,7 +34,12 @@ export const BONES: [JointName, JointName, 'L' | 'R' | 'C'][] = [
 ]
 
 /** One video frame: time (s) and [x, y, visibility] for each joint in JOINT_NAMES order (null = not found) */
-export interface PoseFrame { t: number; p: ([number, number, number] | null)[] }
+export interface PoseFrame {
+  t: number
+  p: ([number, number, number] | null)[]
+  /** 3D points in meters (x right, y down, z toward/away from camera), same order. Missing on older saves. */
+  w?: ([number, number, number] | null)[]
+}
 
 export interface Angles {
   lKnee: number | null; rKnee: number | null
@@ -108,6 +113,24 @@ function angle3(a: { x: number; y: number } | null, b: { x: number; y: number } 
   return (Math.acos(cos) * 180) / Math.PI
 }
 
+/** World (3D) position of a joint, only if the joint was clearly seen */
+export function wpt(f: PoseFrame, j: JointName): [number, number, number] | null {
+  const i = JOINT_NAMES.indexOf(j)
+  const w = f.w?.[i], p = f.p[i]
+  return w && p && p[2] >= 0.3 ? w : null // 3D guesses hold up even when a joint is partly hidden
+}
+
+/** True 3D angle at b made by a-b-c */
+export function angle3D(a: [number, number, number] | null, b: [number, number, number] | null, c: [number, number, number] | null): number | null {
+  if (!a || !b || !c) return null
+  const u = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], v = [c[0] - b[0], c[1] - b[1], c[2] - b[2]]
+  const d = Math.hypot(u[0], u[1], u[2]) * Math.hypot(v[0], v[1], v[2])
+  if (!d) return null
+  return (Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / d))) * 180) / Math.PI
+}
+
+export const has3D = (frames: PoseFrame[]) => frames.some(f => f.w?.some(Boolean))
+
 /** Lean of the line top->bottom away from vertical (degrees) */
 function fromVertical(top: { x: number; y: number } | null, bottom: { x: number; y: number } | null, aspect: number): number | null {
   if (!top || !bottom) return null
@@ -127,24 +150,32 @@ function fromLevel(a: { x: number; y: number } | null, b: { x: number; y: number
 const vis = <T extends { v: number }>(p: T | null): T | null => (p && p.v >= MIN_VIS ? p : null)
 const mid = (a: { x: number; y: number } | null, b: { x: number; y: number } | null) => (a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a ?? b)
 
-export function frameAngles(f: PoseFrame, aspect: number): Angles {
+/** Joint angles for one frame. use3d: use the 3D points when the video has them (real bend, even when a limb points at the camera) */
+export function frameAngles(f: PoseFrame, aspect: number, use3d = true): Angles {
   const g = (j: JointName) => vis(pt(f, j))
+  const J = (a: JointName, b: JointName, c: JointName) => {
+    if (use3d && f.w) {
+      const v = angle3D(wpt(f, a), wpt(f, b), wpt(f, c))
+      if (v != null) return v
+    }
+    return angle3(g(a), g(b), g(c), aspect)
+  }
   return {
-    lKnee: angle3(g('lHip'), g('lKnee'), g('lAnkle'), aspect),
-    rKnee: angle3(g('rHip'), g('rKnee'), g('rAnkle'), aspect),
-    lHip: angle3(g('lShoulder'), g('lHip'), g('lKnee'), aspect),
-    rHip: angle3(g('rShoulder'), g('rHip'), g('rKnee'), aspect),
-    lElbow: angle3(g('lShoulder'), g('lElbow'), g('lWrist'), aspect),
-    rElbow: angle3(g('rShoulder'), g('rElbow'), g('rWrist'), aspect),
-    lWrist: angle3(g('lElbow'), g('lWrist'), g('lHand'), aspect),
-    rWrist: angle3(g('rElbow'), g('rWrist'), g('rHand'), aspect),
-    lShoulder: angle3(g('lHip'), g('lShoulder'), g('lElbow'), aspect),
-    rShoulder: angle3(g('rHip'), g('rShoulder'), g('rElbow'), aspect),
+    lKnee: J('lHip', 'lKnee', 'lAnkle'),
+    rKnee: J('rHip', 'rKnee', 'rAnkle'),
+    lHip: J('lShoulder', 'lHip', 'lKnee'),
+    rHip: J('rShoulder', 'rHip', 'rKnee'),
+    lElbow: J('lShoulder', 'lElbow', 'lWrist'),
+    rElbow: J('rShoulder', 'rElbow', 'rWrist'),
+    lWrist: J('lElbow', 'lWrist', 'lHand'),
+    rWrist: J('rElbow', 'rWrist', 'rHand'),
+    lShoulder: J('lHip', 'lShoulder', 'lElbow'),
+    rShoulder: J('rHip', 'rShoulder', 'rElbow'),
     trunk: fromVertical(mid(g('lShoulder'), g('rShoulder')), mid(g('lHip'), g('rHip')), aspect),
     lShin: fromVertical(g('lKnee'), g('lAnkle'), aspect),
     rShin: fromVertical(g('rKnee'), g('rAnkle'), aspect),
-    lAnkle: angle3(g('lKnee'), g('lAnkle'), g('lFoot'), aspect),
-    rAnkle: angle3(g('rKnee'), g('rAnkle'), g('rFoot'), aspect),
+    lAnkle: J('lKnee', 'lAnkle', 'lFoot'),
+    rAnkle: J('rKnee', 'rAnkle', 'rFoot'),
     shTilt: fromLevel(g('lShoulder'), g('rShoulder'), aspect),
     hipTilt: fromLevel(g('lHip'), g('rHip'), aspect),
   }
@@ -245,8 +276,8 @@ export function findReps(times: number[], s: (number | null)[]): { start: number
   return reps
 }
 
-export function analyze(frames: PoseFrame[], exercise: ExerciseKind, view: View, aspect: number, duration: number): { result: AnalysisResult; angles: Angles[]; primary: (number | null)[] } {
-  const angles = frames.map(f => frameAngles(f, aspect))
+export function analyze(frames: PoseFrame[], exercise: ExerciseKind, view: View, aspect: number, duration: number, use3d = true): { result: AnalysisResult; angles: Angles[]; primary: (number | null)[] } {
+  const angles = frames.map(f => frameAngles(f, aspect, use3d))
   const side = betterSide(frames)
   const raw = primarySeries(frames, angles, exercise, view, side)
   const primary = smooth(raw)
