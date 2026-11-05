@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import type { ParsedWeek } from './parseExcelProgram'
 import { createExerciseMatcher } from './exerciseMatcher'
 import { liftForExercise } from './maxes'
+import { fetchAll } from './fetchAll'
 
 function guessCategory(section: string | null): string {
   const s = (section || '').toUpperCase()
@@ -29,9 +30,10 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
   }
 
   // Load the library
-  const { data: existingExercises, error: exLoadError } = await supabase
-    .from('exercises')
-    .select('id, title, video_url')
+  // (the whole library — Supabase only sends 1,000 rows per request, so page through it)
+  const { data: existingExercises, error: exLoadError } = await fetchAll<{ id: string; title: string; video_url: string | null }>(
+    (from, to) => supabase.from('exercises').select('id, title, video_url').order('id').range(from, to)
+  )
   if (exLoadError) throw new Error(`Could not load exercises: ${exLoadError.message}`)
 
   // Only exercises WITH a video are used for smart matching
@@ -81,6 +83,13 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
       .single()
 
     if (exError || !newEx) {
+      // Maybe it already exists (e.g. someone added it a moment ago) — use that one instead of failing
+      const { data: found } = await supabase.from('exercises').select('id').ilike('title', name.trim()).limit(1).maybeSingle()
+      if (found?.id) {
+        nameToId.set(key, found.id)
+        titleToId.set(key, found.id)
+        continue
+      }
       throw new Error(`Failed to create exercise "${name}": ${exError?.message}`)
     }
 

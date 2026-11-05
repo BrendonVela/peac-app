@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { parseRefMaxes, type RefMaxes } from './maxes'
+import { parseExcelAcross } from './parseExcelAcross'
 
 export interface ParsedSet {
   setLabel: string
@@ -241,5 +242,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
     }
   }
 
+  // Nothing in the usual layout? Try the 'one tab per day, weeks left to right' layout
+  if (allWeeks.length === 0) return parseExcelAcross(workbook)
   return allWeeks
 }
