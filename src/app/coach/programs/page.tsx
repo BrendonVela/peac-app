@@ -2,11 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import { coachMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, BookOpen, Upload } from 'lucide-react'
+import { Plus, BookOpen } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
-import { importProgramFromExcel } from '@/app/actions/importProgram'
+import { ImportExcel } from './ImportExcel'
 import { ImportDocument } from './ImportDocument'
 import { UseTemplateButton, TemplateOwnerButtons } from './TemplateButtons'
 import { LayoutTemplate } from 'lucide-react'
@@ -54,19 +54,7 @@ export default async function ProgramsPage() {
         </Link>
       </div>
       
-      <form action={importProgramFromExcel} className="flex flex-wrap items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3">
-        <Upload className="w-4 h-4 text-zinc-400 shrink-0" />
-        <input
-          type="file"
-          name="file"
-          accept=".xlsx,.xls"
-          required
-          className="flex-1 min-w-0 text-sm text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:text-sm file:font-medium file:cursor-pointer hover:file:bg-blue-700"
-        />
-        <Button type="submit" size="sm" variant="secondary">
-          Import
-        </Button>
-      </form>
+      <ImportExcel />
 
       <ImportDocument />
 
