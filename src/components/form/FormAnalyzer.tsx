@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText, ZoomIn, ZoomOut, Crosshair, EyeOff, RotateCcw, Move, Box } from 'lucide-react'
+import { X, Play, Pause, ChevronLeft, ChevronRight, Activity, CheckCircle2, AlertTriangle, Info, RefreshCw, Camera, SlidersHorizontal, Pencil, Minus, ArrowUpRight, Circle, Triangle, Undo2, Trash2, Send, MessageSquareText, ZoomIn, ZoomOut, Crosshair, EyeOff, RotateCcw, Move, Box, Ruler } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { saveVideoAnalysis, saveVideoNotes, sendVideoReview } from '@/app/actions/videoAnalysis'
-import { drawStroke, notesAt, PEN_COLORS, POINT_COLORS, POINT_IDEAS, parseAnnotations, pointAt, setKey, type CustomAngle, type CustomPoint, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
+import { drawStroke, notesAt, PEN_COLORS, POINT_COLORS, POINT_IDEAS, parseAnnotations, pointAt, setKey, fmtLen, parseLength, type Scale2D, type CustomAngle, type CustomPoint, type Stroke, type Tool, type VideoNote } from '@/lib/pose/annotations'
 import type { Message } from '@/types'
 import { extractPose, loadPoseEngine } from '@/lib/pose/engine'
 import {
@@ -120,6 +120,14 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   const [draftVer, setDraftVer] = useState(0)
   const [noteText, setNoteText] = useState('')
   const [pauseAtNotes, setPauseAtNotes] = useState(true)
+  // Measuring: 2D scale from a line of known length, athlete height to fine-tune 3D, units
+  const [scale2d, setScale2d] = useState<Scale2D | null>(null)
+  const [athleteIn, setAthleteIn] = useState<number | null>(null)
+  const [units, setUnits] = useState<'in' | 'cm'>('in')
+  const [calibrating, setCalibrating] = useState(false)
+  const calibRef = useRef(false)
+  calibRef.current = calibrating
+  const measureRef = useRef<{ scale: Scale2D | null; k3: number; units: 'in' | 'cm' }>({ scale: null, k3: 1, units: 'in' })
   const pauseRef = useRef(true)
   pauseRef.current = pauseAtNotes
   const [notesMsg, setNotesMsg] = useState('')
@@ -168,7 +176,8 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
         const ann = parseAnnotations(data?.annotations)
         const saved = [...ann.notes, ...ann.points]
         setNotes(ann.notes); setPoints(ann.points); setHidden(new Set(ann.hidden as JointName[])); setAngles(ann.angles ?? [])
-        lastSaved.current = JSON.stringify({ v: 2, notes: ann.notes, points: ann.points, hidden: ann.hidden, angles: ann.angles ?? [] })
+        setScale2d(ann.scale ?? null); setAthleteIn(ann.athleteIn ?? null); setUnits(ann.units ?? 'in')
+        lastSaved.current = JSON.stringify({ v: 2, notes: ann.notes, points: ann.points, hidden: ann.hidden, angles: ann.angles ?? [], scale: ann.scale ?? null, athleteIn: ann.athleteIn ?? null, units: ann.units ?? 'in' })
         loadedNotes.current = true
         if (data?.frames?.length) {
           setExercise(data.exercise as ExerciseKind)
@@ -195,6 +204,21 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   // New exercise / camera view -> start from that exercise's usual markers
   const side = analysis?.result.side
   const is3D = useMemo(() => has3D(frames), [frames])
+  /** 3D points come out roughly in meters for an average-size person; the athlete's real height fine-tunes that */
+  const k3 = useMemo(() => {
+    if (!athleteIn || !is3D) return 1
+    const spans: number[] = []
+    for (const f of frames) {
+      const n = wpt(f, 'nose'), lh = wpt(f, 'lHeel'), rh = wpt(f, 'rHeel')
+      const heelY = lh && rh ? Math.max(lh[1], rh[1]) : (lh ?? rh)?.[1]
+      if (n && heelY != null) spans.push(heelY - n[1])
+    }
+    if (spans.length < 3) return 1
+    spans.sort((a, b) => a - b)
+    const tall = spans[Math.floor(spans.length * 0.95)] // most upright moment
+    return tall > 0.5 ? (athleteIn * 0.0254 * 0.92) / tall : 1 // nose sits at ~92% of standing height
+  }, [athleteIn, is3D, frames])
+  measureRef.current = { scale: scale2d, k3, units }
   useEffect(() => { setShown(defaultShown(exercise, view, side)); setGraphKey('auto') }, [exercise, view, side])
 
   function toggleAngle(k: AngleKey) {
@@ -352,6 +376,33 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   function startAngle() {
     videoRef.current?.pause(); setPlaying(false)
     setPlacing(null); setFixing(null); setDrawMode(false); setPicking([])
+  }
+
+  /** What a ruler line measures: 3D when both ends are on body points, 2D once a scale is set */
+  function measureLabels(s: Stroke, t: number, va: number): string[] {
+    if (s.pts.length < 2) return []
+    const { scale, k3: k, units: u } = measureRef.current
+    const out: string[] = []
+    const refs = s.refs ?? []
+    if (use3dRef.current && refs.length >= 2 && refs[0]?.startsWith('joint:') && refs[1]?.startsWith('joint:')) {
+      const f = frameAt(frames, t)
+      const a = f ? wpt(f, refs[0].slice(6) as JointName) : null, b = f ? wpt(f, refs[1].slice(6) as JointName) : null
+      if (a && b) {
+        const m = 39.37 * k
+        const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2]
+        out.push(`3D ${fmtLen(Math.hypot(dx, dy, dz) * m, u)}`)
+        out.push(`↕ ${fmtLen(Math.abs(dy) * m, u)}  ↔ ${fmtLen(Math.hypot(dx, dz) * m, u)}`)
+      }
+    }
+    const a = s.pts[0], b = s.pts[s.pts.length - 1]
+    if (scale) {
+      const per = scale.inches / scale.len
+      const dx = (b[0] - a[0]) * va, dy = b[1] - a[1]
+      out.push(`${out.length ? '2D ' : ''}${fmtLen(Math.hypot(dx, dy) * per, u)}`)
+      out.push(`↕ ${fmtLen(Math.abs(dy) * per, u)}  ↔ ${fmtLen(Math.abs(dx) * per, u)}`)
+    }
+    if (!out.length) out.push(calibRef.current && drawModeRef.current ? 'Scale line' : 'Set a scale (or snap to body points)')
+    return out
   }
 
   // ---------- Points ----------
@@ -561,7 +612,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
     const strokes: { s: Stroke; t: number }[] = drawModeRef.current
       ? [...draft.current, ...(inProgress.current ? [inProgress.current] : [])].map(s => ({ s, t: video.currentTime }))
       : notesAt(notesRef.current, video.currentTime).flatMap(n => n.strokes.map(s => ({ s, t: n.t })))
-    for (const { s, t: st } of strokes) drawStroke(ctx, s, r, s.tool === 'angle' && s.pts.length >= 3 ? stroke3D(s, st) : null)
+    for (const { s, t: st } of strokes) drawStroke(ctx, s, r, s.tool === 'angle' && s.pts.length >= 3 ? stroke3D(s, st) : null, s.tool === 'measure' ? measureLabels(s, st, va) : undefined)
 
     // Your 3-point angles, followed through the video
     for (const a of anglesRef.current) {
@@ -662,7 +713,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   function penDown(e: React.PointerEvent) {
     e.preventDefault()
     const raw = toNorm(e); if (!raw) return
-    const snapped = tool === 'angle' || tool === 'line' || tool === 'arrow' ? snap(e, raw) : { p: raw, ref: null }
+    const snapped = tool === 'angle' || tool === 'line' || tool === 'arrow' || (tool === 'measure' && !calibRef.current) ? snap(e, raw) : { p: raw, ref: null }
     const p = snapped.p
     if (tool === 'angle') {
       const cur = inProgress.current
@@ -673,18 +724,40 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       return
     }
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
-    inProgress.current = { tool, color, pts: [p] }
+    inProgress.current = tool === 'measure' ? { tool, color: calibRef.current ? '#ffffff' : color, pts: [p], refs: [snapped.ref] } : { tool, color, pts: [p] }
   }
   function penMove(e: React.PointerEvent) {
     const cur = inProgress.current
     if (!cur || cur.tool === 'angle') return
     const p = toNorm(e); if (!p) return
     if (cur.tool === 'pen') cur.pts.push(p)
-    else cur.pts = [cur.pts[0], cur.tool === 'circle' ? p : snap(e, p).p]
+    else if (cur.tool === 'measure') {
+      const sn = calibRef.current ? { p, ref: null } : snap(e, p)
+      cur.pts = [cur.pts[0], sn.p]
+      cur.refs = [cur.refs?.[0] ?? null, sn.ref]
+    } else cur.pts = [cur.pts[0], cur.tool === 'circle' ? p : snap(e, p).p]
   }
   function penUp() {
     const cur = inProgress.current
     if (!cur || cur.tool === 'angle') return
+    if (cur.tool === 'measure' && calibRef.current) {
+      // This line sets the 2D scale
+      inProgress.current = null
+      setDraftVer(v => v + 1)
+      if (cur.pts.length < 2) return
+      const r = videoRect()
+      const va = r?.va ?? aspect
+      const [a, b] = [cur.pts[0], cur.pts[1]]
+      const len = Math.hypot((b[0] - a[0]) * va, b[1] - a[1])
+      if (len < 0.01) { setFlash('Draw a longer line'); return }
+      const ans = window.prompt('How long is the line you just drew? (e.g. 17 in, 43 cm, 6 ft)', '17 in')
+      const inches = ans ? parseLength(ans) : null
+      if (!inches || inches <= 0) { setFlash('Scale not set'); return }
+      setScale2d({ len, inches })
+      setCalibrating(false)
+      setFlash(`Scale set: that line = ${fmtLen(inches, units)}`)
+      return
+    }
     if (cur.tool === 'pen' || cur.pts.length >= 2) draft.current.push(cur)
     inProgress.current = null
     setDraftVer(v => v + 1)
@@ -705,7 +778,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
   // Save notes + your points + removed points a moment after any change
   useEffect(() => {
     if (!loadedNotes.current || !canSave) return
-    const data = { v: 2 as const, notes, points, hidden: Array.from(hidden), angles }
+    const data = { v: 2 as const, notes, points, hidden: Array.from(hidden), angles, scale: scale2d, athleteIn, units }
     const json = JSON.stringify(data)
     if (json === lastSaved.current) return
     setNotesMsg('Saving…')
@@ -715,7 +788,7 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
       setNotesMsg(r && 'error' in r && r.error ? `Not saved: ${r.error}` : '✓ Saved')
     }, 800)
     return () => clearTimeout(tm)
-  }, [notes, points, hidden, angles, canSave, path])
+  }, [notes, points, hidden, angles, scale2d, athleteIn, units, canSave, path])
   function saveNote() {
     const strokes = draft.current.slice()
     if (!strokes.length && !noteText.trim()) { setDrawMode(false); return }
@@ -1053,8 +1126,8 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
             {drawMode ? (
               <div className="rounded-xl border border-yellow-500/40 bg-zinc-900 p-3 space-y-2.5">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {([['pen', Pencil, 'Draw'], ['line', Minus, 'Line'], ['arrow', ArrowUpRight, 'Arrow'], ['circle', Circle, 'Circle'], ['angle', Triangle, 'Angle']] as const).map(([k, Icon, label]) => (
-                    <button key={k} onClick={() => { setTool(k); inProgress.current = null }}
+                  {([['pen', Pencil, 'Draw'], ['line', Minus, 'Line'], ['arrow', ArrowUpRight, 'Arrow'], ['circle', Circle, 'Circle'], ['angle', Triangle, 'Angle'], ['measure', Ruler, 'Measure']] as const).map(([k, Icon, label]) => (
+                    <button key={k} onClick={() => { setTool(k); inProgress.current = null; if (k !== 'measure') setCalibrating(false); else if (!scale2d && !is3D) setCalibrating(true) }}
                       className={cn('flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium', tool === k ? 'border-yellow-400 bg-yellow-400/15 text-white' : 'border-zinc-700 text-zinc-400')}>
                       <Icon className="w-3.5 h-3.5" /> {label}
                     </button>
@@ -1074,6 +1147,39 @@ export function FormAnalyzer({ src, path, title, canSave, onClose, onSent }: {
                       return n === 0 ? 'Angle — tap 1 of 3: one end (e.g. shoulder)' : n === 1 ? 'Tap 2 of 3: the joint in the middle (e.g. elbow)' : 'Tap 3 of 3: the other end (e.g. hand)' })()}
                     <span className="block text-[11px] font-normal text-zinc-400">Taps near a body point snap onto it. If all 3 are body points, it shows the 3D angle.</span>
                   </p>
+                )}
+                {tool === 'measure' && (
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-950/60 p-2.5 space-y-2 text-[12px]">
+                    {calibrating ? (
+                      <p className="font-medium text-white">📏 Set the scale: drag a line across something you know the size of — home plate (17 in), a 45-lb plate (17.7 in), a box, or the athlete standing tall. Then type its length.</p>
+                    ) : (
+                      <p className="font-medium text-yellow-300">Drag from one spot to another. Ends snap to body points.
+                        <span className="block font-normal text-zinc-400">Both ends on body points = 3D distance. Anything else uses the 2D scale. ↕ = height, ↔ = across.</span>
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-zinc-400">2D scale:</span>
+                      <span className="text-white">{scale2d ? `set (line = ${fmtLen(scale2d.inches, units)})` : 'not set'}</span>
+                      <button onClick={() => setCalibrating(c => !c)} className={cn('rounded-md border px-2 py-1', calibrating ? 'border-yellow-400 text-white' : 'border-zinc-700 text-zinc-300')}>{calibrating ? 'Cancel' : scale2d ? 'Reset scale' : 'Set scale'}</button>
+                      <div className="ml-auto flex rounded-md border border-zinc-700 overflow-hidden">
+                        {(['in', 'cm'] as const).map(u => (
+                          <button key={u} onClick={() => setUnits(u)} className={cn('px-2 py-1', units === u ? 'bg-zinc-700 text-white' : 'text-zinc-400')}>{u === 'in' ? 'ft / in' : 'cm'}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {is3D && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-zinc-400">Athlete height (makes 3D more accurate):</span>
+                        <input
+                          defaultValue={athleteIn ? fmtLen(athleteIn, 'in').replace(/"$/, '') : ''}
+                          placeholder={`e.g. 5'10`}
+                          onBlur={e => { const v = e.target.value.trim(); if (!v) { setAthleteIn(null); return } const n = parseLength(v); if (n && n > 36 && n < 96) setAthleteIn(n); else setFlash('Height not understood — try 5\'10') }}
+                          className="w-24 rounded-md bg-zinc-800 border border-zinc-700 px-2 py-1 text-white"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[11px] text-zinc-500">2D is only right for things the same distance from the camera as your scale line (film straight from the side). 3D estimates from one camera are within a few inches, not lab-exact.</p>
+                  </div>
                 )}
                 <textarea
                   value={noteText}

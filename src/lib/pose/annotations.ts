@@ -1,7 +1,7 @@
 // Coach drawings + notes pinned to a moment in a video.
 // Points are stored 0..1 across the video picture, so they line up on any screen size.
 
-export type Tool = 'pen' | 'line' | 'arrow' | 'circle' | 'angle'
+export type Tool = 'pen' | 'line' | 'arrow' | 'circle' | 'angle' | 'measure'
 export interface Stroke {
   tool: Tool; color: string; pts: [number, number][]
   /** For the angle tool: which body point each tap snapped to ('joint:rElbow'), so it can use the 3D angle */
@@ -22,7 +22,7 @@ function angleAt(a: [number, number], b: [number, number], c: [number, number], 
   return (Math.acos(Math.max(-1, Math.min(1, (ax * cx + ay * cy) / d))) * 180) / Math.PI
 }
 
-export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect, deg3d?: number | null) {
+export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect, deg3d?: number | null, labels?: string[]) {
   const X = (p: [number, number]) => r.ox + p[0] * r.dw
   const Y = (p: [number, number]) => r.oy + p[1] * r.dh
   ctx.save()
@@ -54,6 +54,24 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, r: Rect, de
     const a = p[0], b = p[p.length - 1]
     const rad = Math.hypot(X(b) - X(a), Y(b) - Y(a))
     ctx.beginPath(); ctx.arc(X(a), Y(a), rad, 0, Math.PI * 2); ctx.stroke()
+  } else if (s.tool === 'measure' && p.length >= 2) {
+    // Ruler: line with end ticks + the measurement
+    const a = p[0], b = p[p.length - 1]
+    const ax = X(a), ay = Y(a), bx = X(b), by = Y(b)
+    const ang = Math.atan2(by - ay, bx - ax), nx = -Math.sin(ang) * 8, ny = Math.cos(ang) * 8
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+    ctx.moveTo(ax - nx, ay - ny); ctx.lineTo(ax + nx, ay + ny)
+    ctx.moveTo(bx - nx, by - ny); ctx.lineTo(bx + nx, by + ny)
+    ctx.stroke()
+    if (labels?.length) {
+      ctx.shadowBlur = 0
+      ctx.font = '700 13px Inter, system-ui, sans-serif'
+      const w = Math.max(...labels.map(l => ctx.measureText(l).width)) + 12
+      const h = labels.length * 17 + 6
+      const lx = (ax + bx) / 2 + 10, ly = (ay + by) / 2 - h - 4
+      ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(lx, ly, w, h)
+      labels.forEach((l, i) => { ctx.fillStyle = i === 0 ? s.color : '#d4d4d8'; ctx.fillText(l, lx + 6, ly + 16 + i * 17) })
+    }
   } else if (s.tool === 'angle') {
     // 3 taps: end, corner, end — shows the degrees at the corner
     ctx.beginPath(); ctx.moveTo(X(p[0]), Y(p[0]))
@@ -93,16 +111,44 @@ export interface CustomPoint {
 }
 /** An angle you pick from any 3 points (body or your own), followed through the whole video */
 export interface CustomAngle { id: string; refs: [string, string, string]; color: string }
-export interface Annotations { v: 2; notes: VideoNote[]; points: CustomPoint[]; hidden: string[]; angles?: CustomAngle[] }
+/** 2D scale: a line drawn on something of known size. len = its length in video-height units (width scaled by aspect) */
+export interface Scale2D { len: number; inches: number }
+export interface Annotations {
+  v: 2; notes: VideoNote[]; points: CustomPoint[]; hidden: string[]; angles?: CustomAngle[]
+  scale?: Scale2D | null; athleteIn?: number | null; units?: 'in' | 'cm'
+}
+
+/** 28.4 -> 28.4 in, 52 -> 4' 4", cm when asked */
+export function fmtLen(inches: number, units: 'in' | 'cm' = 'in'): string {
+  if (units === 'cm') return inches * 2.54 >= 100 ? `${(inches * 0.0254).toFixed(2)} m` : `${(inches * 2.54).toFixed(1)} cm`
+  if (inches < 24) return `${inches.toFixed(1)} in`
+  const ft = Math.floor(inches / 12), rest = Math.round(inches - ft * 12)
+  return rest === 12 ? `${ft + 1}' 0"` : `${ft}' ${rest}"`
+}
+
+/** "17 in", "43cm", "6 ft", "5'10", "1.2 m" -> inches (plain numbers = inches) */
+export function parseLength(text: string): number | null {
+  const t = text.trim().toLowerCase()
+  let m = t.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)\s*(\d+(?:\.\d+)?)?\s*(?:"|in|inches)?$/)
+  if (m) return parseFloat(m[1]) * 12 + (m[2] ? parseFloat(m[2]) : 0)
+  m = t.match(/^(\d+(?:\.\d+)?)\s*(in|inch|inches|"|cm|m|mm|yd|yards?)?$/)
+  if (!m) return null
+  const v = parseFloat(m[1]), u = m[2] ?? 'in'
+  if (u === 'cm') return v / 2.54
+  if (u === 'mm') return v / 25.4
+  if (u === 'm') return v / 0.0254
+  if (u.startsWith('yd') || u.startsWith('yard')) return v * 36
+  return v
+}
 
 export const POINT_COLORS = ['#e879f9', '#a3e635', '#fb7185', '#2dd4bf', '#fde047']
 export const POINT_IDEAS = ['Bat tip', 'Bat knob', 'Ball', 'Club head', 'Barbell', 'Racket']
 
 /** Read what's saved (older saves were just a list of notes) */
 export function parseAnnotations(raw: unknown): Annotations {
-  if (Array.isArray(raw)) return { v: 2, notes: raw as VideoNote[], points: [], hidden: [], angles: [] }
+  if (Array.isArray(raw)) return { v: 2, notes: raw as VideoNote[], points: [], hidden: [], angles: [], scale: null, athleteIn: null, units: 'in' }
   const o = (raw ?? {}) as Partial<Annotations>
-  return { v: 2, notes: o.notes ?? [], points: o.points ?? [], hidden: o.hidden ?? [], angles: o.angles ?? [] }
+  return { v: 2, notes: o.notes ?? [], points: o.points ?? [], hidden: o.hidden ?? [], angles: o.angles ?? [], scale: o.scale ?? null, athleteIn: o.athleteIn ?? null, units: o.units ?? 'in' }
 }
 
 /** Where a point is at time t (0..1 across the picture), or null if it isn't placed around then */
