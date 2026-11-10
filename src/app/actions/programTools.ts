@@ -81,7 +81,7 @@ export async function duplicateProgramForAthlete(programId: string, athleteId: s
   // Move the athlete's assignment to the copy (keep their start date)
   const { data: oldAssign } = await supabase
     .from('program_assignments')
-    .select('id, start_date')
+    .select('*')
     .eq('program_id', programId)
     .eq('athlete_id', athleteId)
     .maybeSingle()
@@ -92,6 +92,7 @@ export async function duplicateProgramForAthlete(programId: string, athleteId: s
     program_id: newProgramId,
     athlete_id: athleteId,
     start_date: oldAssign?.start_date ?? todayISO(),
+    ...(oldAssign && 'start_week' in oldAssign ? { start_week: oldAssign.start_week, phase_starts: oldAssign.phase_starts } : {}),
   })
   if (aErr) return { error: aErr.message }
 

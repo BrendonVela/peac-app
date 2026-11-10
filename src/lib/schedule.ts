@@ -97,12 +97,56 @@ export interface ScheduledWorkout {
   status: WorkoutStatus
 }
 
+export interface PhaseInfo {
+  label: string      // "Phase 5"
+  firstWeek: number  // program week numbers this phase covers
+  lastWeek: number
+}
+
 export interface AssignmentInfo {
   id: string
   programId: string
   programTitle: string
-  startDate: string
+  startDate: string                    // date the start week begins
   totalWeeks: number
+  startWeek: number                    // 1 = from the beginning; 17 = start at week 17 (earlier weeks skipped)
+  phaseStarts: Record<string, string>  // week number -> date that week starts (later phases)
+  phases: PhaseInfo[]
+}
+
+/** "Phase 5 — Week 2" -> "Phase 5" (falls back to the whole title) */
+export function phaseLabel(blockTitle: string | null | undefined, week: number): string {
+  const t = String(blockTitle ?? '').trim()
+  const m = t.match(/^(.*?)\s*[—–-]\s*Week\s*\d+\s*$/i)
+  return (m ? m[1] : t).trim() || `Week ${week}`
+}
+
+/** Group a program's weeks into phases by block title */
+export function programPhases(blocks: { title?: string | null; week_number?: number | null }[]): PhaseInfo[] {
+  const byWeek = new Map<number, string>()
+  for (const b of blocks) {
+    const wn = Math.max(1, Number(b.week_number) || 1)
+    if (!byWeek.has(wn)) byWeek.set(wn, phaseLabel(b.title, wn))
+  }
+  const phases: PhaseInfo[] = []
+  for (const wn of Array.from(byWeek.keys()).sort((a, b) => a - b)) {
+    const label = byWeek.get(wn)!
+    const last = phases[phases.length - 1]
+    if (last && last.label === label && wn === last.lastWeek + 1) last.lastWeek = wn
+    else phases.push({ label, firstWeek: wn, lastWeek: wn })
+  }
+  return phases
+}
+
+/** Monday that program week `wn` starts on, given where the athlete started and any phase dates */
+export function weekStartFor(wn: number, startWeek: number, startDate: string, phaseStarts: Record<string, string>): string {
+  let aw = startWeek, ad = startDate
+  for (const [k, d] of Object.entries(phaseStarts ?? {})) {
+    const w = Number(k)
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !(w > startWeek) || w > wn) continue
+    if (w > aw) { aw = w; ad = d }
+  }
+  return addDays(startOfWeek(ad), (wn - aw) * 7)
 }
 
 export interface AthleteSchedule {
@@ -128,7 +172,7 @@ export const STATUS_BADGE: Record<WorkoutStatus, 'green' | 'blue' | 'default' | 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = any
 
-const PROGRAM_TREE = 'id, title, training_blocks(id, week_number, order, workouts(id, title, day_of_week, workout_exercises(id)))'
+const PROGRAM_TREE = 'id, title, training_blocks(id, title, week_number, order, workouts(id, title, day_of_week, workout_exercises(id)))'
 
 /** Turn one athlete's assignments, logged results and moved dates into their schedule */
 function buildSchedule(
@@ -169,8 +213,12 @@ function buildSchedule(
       byWeek.set(wn, list)
     }
 
-    const weekNumbers = Array.from(byWeek.keys()).sort((x, y) => x - y)
-    const totalWeeks = weekNumbers.length > 0 ? weekNumbers[weekNumbers.length - 1] : 0
+    const allWeeks = Array.from(byWeek.keys()).sort((x, y) => x - y)
+    const totalWeeks = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : 0
+    const startWeek = Math.max(1, Number(a.start_week) || 1)
+    const phaseStarts: Record<string, string> = (a.phase_starts && typeof a.phase_starts === 'object') ? a.phase_starts : {}
+    // Weeks before where the athlete started are skipped (not shown, not "missed")
+    const weekNumbers = allWeeks.filter(wn => wn >= startWeek)
 
     assignments.push({
       id: a.id,
@@ -178,6 +226,9 @@ function buildSchedule(
       programTitle: program.title,
       startDate,
       totalWeeks,
+      startWeek,
+      phaseStarts,
+      phases: programPhases(program.training_blocks ?? []),
     })
 
     weekNumbers.forEach(wn => {
@@ -187,7 +238,7 @@ function buildSchedule(
           ((x.day_of_week ?? 0) - (y.day_of_week ?? 0)) ||
           String(x.title).localeCompare(String(y.title))
       )
-      const weekStart = addDays(startOfWeek(startDate), (wn - 1) * 7)
+      const weekStart = weekStartFor(wn, startWeek, startDate, phaseStarts)
       const weekEnd = addDays(weekStart, 6)
       const n = workouts.length
 
@@ -261,14 +312,19 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[]): Pro
   const results: Row[] = []
   const overrides: Row[] = []
   for (const part of chunk(ids, 100)) {
-    const [a, r, o] = await Promise.all([
+    const [a0, r, o] = await Promise.all([
       fetchAll<Row>((from, to) =>
-        supabase.from('program_assignments').select('id, athlete_id, program_id, assigned_at, start_date').in('athlete_id', part).range(from, to)),
+        supabase.from('program_assignments').select('id, athlete_id, program_id, assigned_at, start_date, start_week, phase_starts').in('athlete_id', part).range(from, to)),
       fetchAll<Row>((from, to) =>
         supabase.from('workout_results').select('athlete_id, workout_id, workout_exercise_id, completed, logged_at').in('athlete_id', part).order('logged_at').range(from, to)),
       fetchAll<Row>((from, to) =>
         supabase.from('workout_schedule').select('athlete_id, workout_id, scheduled_date').in('athlete_id', part).range(from, to)),
     ])
+    // Older database without the phase-date columns yet -> load without them
+    const a = a0.error
+      ? await fetchAll<Row>((from, to) =>
+          supabase.from('program_assignments').select('id, athlete_id, program_id, assigned_at, start_date').in('athlete_id', part).range(from, to))
+      : a0
     assignments.push(...a.data)
     results.push(...r.data)
     if (!o.error) overrides.push(...o.data) // table may not exist yet

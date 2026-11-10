@@ -47,3 +47,29 @@ export async function updateAssignmentStartDate(assignmentId: string, athleteId:
   revalidateSchedulePages(athleteId)
   return { ok: true }
 }
+
+/** Where an athlete starts in a program (which week, on what date) and optional start dates for later phases */
+export async function updateAssignmentPhases(
+  assignmentId: string,
+  athleteId: string,
+  startWeek: number,
+  startDate: string,
+  phaseStarts: Record<string, string>
+) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return { error: 'Pick a start date' }
+  const clean: Record<string, string> = {}
+  for (const [k, v] of Object.entries(phaseStarts ?? {})) {
+    if (Number(k) > startWeek && /^\d{4}-\d{2}-\d{2}$/.test(v)) clean[String(Number(k))] = v
+  }
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('program_assignments')
+    .update({ start_date: startDate, start_week: Math.max(1, Math.round(startWeek) || 1), phase_starts: clean })
+    .eq('id', assignmentId)
+  if (error) {
+    if (/start_week|phase_starts/.test(error.message)) return { error: 'Run the phase_dates SQL in Supabase first (see setup steps).' }
+    return { error: error.message }
+  }
+  revalidateSchedulePages(athleteId)
+  return { ok: true }
+}

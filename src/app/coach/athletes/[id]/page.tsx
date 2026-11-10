@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { getReadinessBadge, getReadinessLabel, formatDate, TEST_META } from '@/lib/utils'
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
-import { StartDateForm } from './StartDateForm'
+import { PhaseDatesForm } from './PhaseDatesForm'
 import { MaxesForm } from './MaxesForm'
 import { ManageAthlete } from './ManageAthlete'
 import { LinkAccount, type SignedUpAthlete } from './LinkAccount'
@@ -158,8 +158,8 @@ export default async function AthleteDetailPage({
                             : a.startDate > today ? 'Not started' : 'Finished'}
                         </span>
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <StartDateForm assignmentId={a.id} athleteId={params.id} startDate={a.startDate} />
+                      <div className="flex flex-wrap items-end justify-between gap-2">
+                        <PhaseDatesForm assignmentId={a.id} athleteId={params.id} startDate={a.startDate} startWeek={a.startWeek} phaseStarts={a.phaseStarts} phases={a.phases} />
                         <span className="text-xs text-zinc-500">
                           <span className="text-green-400">{done} done</span>
                           {missed > 0 && <> · <span className="text-red-400">{missed} missed</span></>}
