@@ -7,11 +7,11 @@ import { submitCheckIn } from '@/app/actions/checkins'
 import { cn } from '@/lib/utils'
 
 const fields = [
-  { key: 'sleep_quality', label: 'Sleep Quality', icon: Moon, lowLabel: 'Poor', highLabel: 'Great', color: 'blue' },
-  { key: 'energy', label: 'Energy Level', icon: Zap, lowLabel: 'Drained', highLabel: 'Energized', color: 'yellow' },
-  { key: 'stress', label: 'Stress Level', icon: Brain, lowLabel: 'Relaxed', highLabel: 'Very Stressed', color: 'red', invert: true },
-  { key: 'soreness', label: 'Muscle Soreness', icon: Activity, lowLabel: 'No Soreness', highLabel: 'Very Sore', color: 'orange', invert: true },
-  { key: 'motivation', label: 'Motivation', icon: TrendingUp, lowLabel: 'Low', highLabel: 'High', color: 'green' },
+  { key: 'sleep_quality', label: 'Sleep Quality', icon: Moon, lowLabel: 'Poor', highLabel: 'Great', color: 'blue', desc: 'How well did you sleep last night?' },
+  { key: 'energy', label: 'Energy Level', icon: Zap, lowLabel: 'Drained', highLabel: 'Energized', color: 'yellow', desc: 'How much gas is in the tank right now?' },
+  { key: 'stress', label: 'Stress Level', icon: Brain, lowLabel: 'Relaxed', highLabel: 'Very Stressed', color: 'red', invert: true, desc: 'School, work, life — how much is on your mind?' },
+  { key: 'soreness', label: 'Muscle Soreness', icon: Activity, lowLabel: 'No Soreness', highLabel: 'Very Sore', color: 'orange', invert: true, desc: 'How sore or achy are your muscles?' },
+  { key: 'motivation', label: 'Motivation', icon: TrendingUp, lowLabel: 'Low', highLabel: 'High', color: 'green', desc: 'How much do you want to train today?' },
 ] as const
 
 const colorMap: Record<string, string> = {
@@ -74,6 +74,7 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
         <div>
           <p className="text-xs text-zinc-400 uppercase tracking-wide font-medium">Readiness Score</p>
           <p className="text-4xl font-bold text-white mt-1">{score}<span className="text-lg text-zinc-500">/10</span></p>
+          <p className="text-[11px] text-zinc-500 mt-1">Your overall score from the answers below. Higher = more ready to train.</p>
         </div>
         <div className={cn(
           'w-20 h-20 rounded-full border-4 flex items-center justify-center text-2xl font-bold',
@@ -86,7 +87,7 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {fields.map(({ key, label, icon: Icon, lowLabel, highLabel, color }) => (
+        {fields.map(({ key, label, icon: Icon, lowLabel, highLabel, color, desc }) => (
           <div key={key} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -95,6 +96,7 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
               </div>
               <span className={cn('text-2xl font-bold', colorMap[color])}>{values[key]}</span>
             </div>
+            <p className="-mt-2 text-xs text-zinc-400">{desc}</p>
             <input
               type="range"
               min={1}
