@@ -1,6 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Mic } from 'lucide-react'
+import { ask, canListen, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
+import { answerNumber } from '@/lib/voice/parse'
 import { Heart, Moon, Zap, Brain, Activity, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { submitCheckIn } from '@/app/actions/checkins'
@@ -27,7 +30,7 @@ function computeScore(values: Record<string, number>) {
   return ((sleep_quality + energy + (11 - stress) + (11 - soreness) + motivation) / 5).toFixed(1)
 }
 
-export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeader = true }: { onDone: () => void; submitLabel?: string; showHeader?: boolean }) {
+export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeader = true, voice = false }: { onDone: () => void; submitLabel?: string; showHeader?: boolean; /** Start the spoken check-in right away */ voice?: boolean }) {
   const [values, setValues] = useState<Record<string, number>>({
     sleep_quality: 7,
     energy: 7,
@@ -40,9 +43,74 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
   const [error, setError] = useState('')
 
   const score = computeScore(values)
+  const valuesRef = useRef(values)
+  valuesRef.current = values
+  const [activeQ, setActiveQ] = useState<number | null>(null)
+  const [voiceOn, setVoiceOn] = useState(false) // read after load so server and phone match
+  useEffect(() => { setVoiceOn(getVoiceSettings().enabled) }, [])
+  const runId = useRef(0)
+
+  // ---------- Spoken check-in: asks each question, listens for a number ----------
+  async function runVoice() {
+    const id = ++runId.current
+    const alive = () => runId.current === id
+    if (!getVoiceSettings().enabled) return
+    const listening = getVoiceSettings().autoListen && canListen()
+    if (!listening) {
+      await speak("Quick check-in before we train. Slide each bar to how you feel, then tap the button at the bottom.")
+      return
+    }
+    await speak("Quick check-in before we train. Answer each one with a number from 1 to 10.")
+    for (let i = 0; i < fields.length; i++) {
+      if (!alive()) return
+      const f = fields[i]
+      setActiveQ(i)
+      document.getElementById(`ci-${f.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      let prompt = `${f.label}. ${f.desc} 1 is ${f.lowLabel.toLowerCase()}, 10 is ${f.highLabel.toLowerCase()}.`
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const ans = await ask(prompt)
+        if (!alive()) return
+        if (!ans) { setActiveQ(null); await speak('No problem. Use the sliders, or tap the mic and say a number.'); return }
+        if (/^(skip|pass|same|keep it)/i.test(ans.trim())) break
+        const v = answerNumber(ans)
+        if (v != null) { setValues(prev => ({ ...prev, [f.key]: v })); break }
+        prompt = 'Sorry, just a number from 1 to 10.'
+      }
+    }
+    setActiveQ(null)
+    if (!alive()) return
+    const final = computeScore(valuesRef.current)
+    const ans = await ask(`Your readiness is ${final} out of 10. Ready to check in? Say yes.`)
+    if (!alive()) return
+    if (/^(yes|yeah|yep|sure|ok|okay|ready|let'?s go|do it|submit)/i.test(ans.trim())) await submitNow()
+    else if (ans) await speak('Okay. Change anything you want, then tap the button.')
+  }
+
+  useEffect(() => {
+    if (voice) { const t = setTimeout(runVoice, 400); return () => { clearTimeout(t); runId.current++ } }
+    return () => { runId.current++ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Mic commands while this screen is open
+  useEffect(() => onVoiceCommand(async cmd => {
+    if (cmd.type === 'checkin' || cmd.type === 'start' || cmd.type === 'repeat') { runVoice(); return true }
+    if (cmd.type === 'yes') { await submitNow(); return true }
+    if (cmd.type === 'number') {
+      const i = activeQ ?? 0
+      const f = fields[i]
+      if (cmd.value >= 1 && cmd.value <= 10) { setValues(prev => ({ ...prev, [f.key]: cmd.value })); await speak(`${f.label}, ${cmd.value}.`); return true }
+    }
+    return false
+  }, 10)) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    await submitNow()
+  }
+
+  async function submitNow() {
+    runId.current++
     setSubmitting(true)
     setError('')
 
@@ -55,6 +123,7 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
       setError(result.error)
       setSubmitting(false)
     } else {
+      if (getVoiceSettings().enabled) speak(voice ? 'Checked in. Let\'s get to work.' : 'Checked in.')
       onDone()
     }
   }
@@ -86,9 +155,15 @@ export function CheckInForm({ onDone, submitLabel = 'Submit Check-In', showHeade
         </div>
       </div>
 
+      {voiceOn && (
+        <button type="button" onClick={() => runVoice()} className="w-full flex items-center justify-center gap-2 rounded-xl border border-blue-600/40 bg-blue-600/10 py-2.5 text-sm text-blue-100">
+          <Mic className="w-4 h-4" /> Do my check-in out loud
+        </button>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5">
         {fields.map(({ key, label, icon: Icon, lowLabel, highLabel, color, desc }) => (
-          <div key={key} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+          <div key={key} id={`ci-${key}`} className={cn('bg-zinc-900 border rounded-xl p-4 space-y-3 transition-colors', activeQ !== null && fields[activeQ]?.key === key ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-zinc-800')}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Icon className={cn('w-4 h-4', colorMap[color])} />

@@ -223,10 +223,35 @@ export async function WorkoutView({
   const steps: GuidedStep[] = []
   const cards: React.ReactNode[] = []
 
+  // ---------- Words for the voice coach ----------
+  const sayTargets = (wx: any): string => {
+    const t = targetsFor(wx)
+    if (!t.length) return ''
+    const rep = (r: string | null) => (r ? formatReps(r) : '')
+    if (targetsAreUniform(t)) {
+      const reps = rep(t[0].reps)
+      return `${t.length} ${t.length === 1 ? 'set' : 'sets'}${reps ? ` of ${reps}` : ''}${t[0].weight ? ` at ${t[0].weight}` : ''}`
+    }
+    return t.slice(0, 6).map((x, k) => `set ${k + 1}, ${[rep(x.reps), x.weight ? `at ${x.weight}` : ''].filter(Boolean).join(' ')}`).join('; ')
+  }
+  const sayExercise = (wx: any, tag: string | null): string => {
+    const ex = wx.exercises
+    const cue = ex?.coaching_cues ? String(ex.coaching_cues).split(/[.;\n]/)[0].trim() : ''
+    const note = wx.notes && String(wx.notes).length <= 140 ? String(wx.notes) : ''
+    return [
+      `${tag ? `${tag}, ` : ''}${ex?.title ?? 'Exercise'}.`,
+      `${sayTargets(wx)}.`,
+      wx.tempo ? `Tempo ${wx.tempo}.` : '',
+      note ? `Coach says: ${note}.` : '',
+      cue ? `Cue: ${cue}.` : '',
+    ].filter(Boolean).join(' ')
+  }
+
   if (warmupItems.length > 0) {
     steps.push({
       key: 'warmup', kind: 'warmup', section: null, title: warmup?.title || 'Warm-up',
       exerciseIds: [], labels: [], sets: 0, restLabel: null,
+      say: `Warm-up. ${warmupItems.slice(0, 12).join('. ')}. Check them off as you go, then say next.`,
     })
     cards.push(
       <WarmupChecklist
@@ -262,6 +287,8 @@ export async function WorkoutView({
         key: `g-${wx.id}`, kind: 'group', section,
         title: `Superset ${letter}: ${labels.map(l => l.name.split(/[—(]/)[0].trim()).join(' + ')}`,
         exerciseIds: members.map(m => m.id), labels, sets, restLabel,
+        restSeconds: restFromText(section)?.seconds ?? restForExercise(members[members.length - 1]).seconds,
+        say: `Superset ${letter}. ${sets} rounds. Do one set of each, in order, then rest${restLabel ? ` ${restLabel}` : ''}. ${members.map((m, k) => sayExercise(m, labels[k].tag)).join(' ')} Tell me your weight and reps after each set, like "135 for 10".`,
       })
       cards.push(
         <div key={`g-${wx.id}`} className="space-y-3 border-l-2 border-orange-500/50 pl-3">
@@ -274,6 +301,8 @@ export async function WorkoutView({
         key: wx.id, kind: 'single', section,
         title: wx.exercises?.title ?? 'Exercise',
         exerciseIds: [wx.id], labels: [], sets: targets.length, restLabel: restForExercise(wx).label,
+        restSeconds: restForExercise(wx).seconds,
+        say: `${sayExercise(wx, null)}${restForExercise(wx).label ? ` Rest ${restForExercise(wx).label} between sets.` : ''} After each set, tell me what you did, like "185 for 5", or just say done.`,
       })
       cards.push(renderExercise(wx, i, null))
     }

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getViewAs } from '@/lib/acting'
 import { AccountSettings } from '@/components/settings/AccountSettings'
+import { VoiceSettings } from '@/components/voice/VoiceSettings'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -20,6 +21,7 @@ export default async function SettingsPage() {
       name={profile?.name ?? user.user_metadata?.name ?? ''}
       role={role}
       viewingAs={viewAs?.name ?? null}
+      extra={<VoiceSettings />}
     />
   )
 }

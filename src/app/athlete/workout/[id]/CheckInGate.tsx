@@ -29,7 +29,7 @@ export function CheckInGate() {
           📶 No signal? <b>Start the workout anyway</b> — check in when you&apos;re back online.
         </button>
       )}
-      <CheckInForm showHeader={false} submitLabel="Check in & start workout" onDone={() => router.refresh()} />
+      <CheckInForm showHeader={false} submitLabel="Check in & start workout" voice onDone={() => router.refresh()} />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { AthleteNav } from '@/components/layout/AthleteNav'
 import { ViewAsBanner } from '@/components/ViewAsBanner'
 import { getViewAs, athleteMatch } from '@/lib/acting'
 import { brandFromRow, brandStyle } from '@/lib/brand'
+import { VoiceCoach } from '@/components/voice/VoiceCoach'
 
 export default async function AthleteLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -31,6 +32,7 @@ export default async function AthleteLayout({ children }: { children: React.Reac
           {children}
         </div>
       </main>
+      <VoiceCoach />
     </div>
   )
 }

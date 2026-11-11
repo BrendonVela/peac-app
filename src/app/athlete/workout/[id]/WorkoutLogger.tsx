@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { registerLogger } from '@/lib/voice/core'
 import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer, Shuffle } from 'lucide-react'
 import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
 import { saveOrQueue } from '@/lib/offlineQueue'
@@ -193,6 +194,39 @@ export function WorkoutLogger({
     setRows(next)
     persist(next, !completed)
   }
+
+  // ---------- Voice: "185 for 5" logs the next open set ----------
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const apiRef = useRef<{ log: (w: number | null, r: number | null) => ReturnType<NonNullable<Parameters<typeof registerLogger>[1]['logNext']>> }>()
+  apiRef.current = {
+    log: (w, r) => {
+      const cur = rowsRef.current
+      const i = cur.findIndex(x => !x.done)
+      if (i < 0) return null
+      const base = fillFromTarget(cur[i], i)
+      const row: Row = { weight: w != null ? String(w) : base.weight, reps: r != null ? String(r) : base.reps, done: true }
+      const next = cur.map((x, k) => (k === i ? row : x))
+      rowsRef.current = next
+      setRows(next)
+      const allDone = next.every(x => x.done)
+      persist(next, allDone)
+      const rested = autoRest && !allDone
+      if (rested) fireRest(REST_START_EVENT, { seconds: restSeconds, title: exerciseTitle })
+      return {
+        set: i + 1, total: next.length,
+        weight: row.weight !== '' ? Number(row.weight) : null,
+        reps: row.reps !== '' ? Number(row.reps) : null,
+        allDone, restLabel, rested,
+      }
+    },
+  }
+  useEffect(() => registerLogger(workoutExerciseId, {
+    title: exerciseTitle,
+    total: setCount,
+    doneSets: () => rowsRef.current.filter(x => x.done).length,
+    logNext: (w, r) => apiRef.current!.log(w, r),
+  }), [workoutExerciseId, exerciseTitle, setCount])
 
   const lastSummary = lastTime ? lastTime.sets.map(formatLast).filter(Boolean).join(', ') : ''
 

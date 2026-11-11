@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
+import { formatClock } from '@/lib/rest'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ListChecks, Rows3, Footprints, Repeat, CheckCircle2, Flame, PartyPopper } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,6 +22,10 @@ export interface GuidedStep {
   labels: { id: string; tag: string; name: string }[]
   sets: number
   restLabel: string | null
+  /** What the voice coach says for this step */
+  say?: string
+  /** Rest between sets/rounds in seconds (for the voice coach) */
+  restSeconds?: number
 }
 
 const MODE_KEY = 'peac_workout_mode'
@@ -94,6 +100,79 @@ export function GuidedWorkout({
   const step = steps[index]
   const next = steps[index + 1]
   const isLast = index === steps.length - 1
+
+  // ---------- Voice coach ----------
+  const firstSay = useRef(true)
+  const stepWords = (i: number) => {
+    const s = steps[i]
+    if (!s) return ''
+    return `Step ${i + 1} of ${steps.length}. ${s.say ?? s.title}`
+  }
+  useEffect(() => {
+    if (finished || mode !== 'guided' || !getVoiceSettings().enabled) return
+    const intro = firstSay.current ? "Let's go. " : ''
+    firstSay.current = false
+    const t = setTimeout(() => speak(intro + stepWords(index)), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, finished, mode])
+
+  function finishByVoice() {
+    setFinished(true)
+    speak(`Workout ${doneEx === totalEx ? 'complete' : 'saved'}! ${doneEx} of ${totalEx} exercises done. Rate how hard it was on the screen, from 1 to 10. Great work today.`)
+  }
+
+  /** Which step voice logging goes to: the open step in step-by-step, else the first unfinished one */
+  const voiceStepIndex = () => (mode === 'guided' ? index : Math.max(0, steps.findIndex(s => s.kind !== 'warmup' && !stepDone(s))))
+
+  useEffect(() => onVoiceCommand(async cmd => {
+    switch (cmd.type) {
+      case 'start': case 'repeat':
+        if (finished) { await speak('This workout is done. Say "go home" or rate how hard it was.'); return true }
+        await speak(stepWords(voiceStepIndex())); return true
+      case 'next':
+        if (isLast || finished) { finishByVoice(); return true }
+        go(index + 1); return true
+      case 'back':
+        if (index === 0) { await speak("You're on the first step."); return true }
+        go(index - 1); return true
+      case 'whats_next':
+        await speak(next ? `Next is ${next.title}.` : 'This is the last one. After this, you are done.'); return true
+      case 'done': case 'log': {
+        const si = voiceStepIndex()
+        const st = steps[si]
+        if (!st) return false
+        if (st.kind === 'warmup') { await speak('Warm-up done. Moving on.'); go(si + 1); return true }
+        // The exercise to log: the one with the fewest sets done (keeps a superset in order)
+        const apis = st.exerciseIds.map((id, k) => ({ id, k, api: getLogger(id) })).filter(x => x.api)
+        if (!apis.length) return false
+        const target = apis.reduce((a, b) => (b.api!.doneSets() < a.api!.doneSets() ? b : a))
+        const w = cmd.type === 'log' ? cmd.weight : null
+        const r = cmd.type === 'log' ? cmd.reps : null
+        const res = target.api!.logNext(w, r)
+        if (!res) { await speak(`All sets are done here. Say next ${next ? `for ${next.title}` : 'to finish'}.`); return true }
+        const what = `${res.weight ? `${res.weight} pounds` : ''}${res.weight && res.reps ? ' for ' : ''}${res.reps ? `${res.reps}` : ''}`
+        let say = `${st.kind === 'group' ? `${st.labels[target.k]?.tag ?? ''}, ` : ''}set ${res.set} of ${res.total}${what ? `, ${what}` : ''}. `
+        if (st.kind === 'group') {
+          const counts = apis.map(x => x.api!.doneSets())
+          const allDone = apis.every(x => x.api!.doneSets() >= x.api!.total)
+          if (allDone) say += `Superset done! Say next ${next ? `for ${next.title}` : 'to finish'}.`
+          else if (counts.every(c => c === counts[0])) say += `Round ${counts[0]} done. Rest ${st.restLabel ?? formatClock(st.restSeconds ?? 90)}.`
+          else {
+            const nxt = apis.find(x => x.api!.doneSets() < Math.max(...counts)) ?? apis[0]
+            say += `Now ${st.labels[nxt.k]?.tag ?? ''}, ${st.labels[nxt.k]?.name ?? nxt.api!.title}.`
+          }
+        } else if (res.allDone) {
+          say += `That's every set. Nice work. ${next ? `Say next for ${next.title}.` : 'Say next to finish.'}`
+        } else if (res.rested) {
+          say += `Rest ${res.restLabel ?? formatClock(st.restSeconds ?? 90)}.`
+        }
+        await speak(say)
+        return true
+      }
+      default: return false
+    }
+  }, 10)) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (steps.length === 0) return null
 
@@ -221,7 +300,7 @@ export function GuidedWorkout({
             <ChevronLeft className="w-5 h-5" /> Back
           </button>
           <button
-            onClick={() => (isLast ? setFinished(true) : go(index + 1))}
+            onClick={() => (isLast ? (getVoiceSettings().enabled ? finishByVoice() : setFinished(true)) : go(index + 1))}
             className={cn(
               'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-semibold min-w-0',
               isLast

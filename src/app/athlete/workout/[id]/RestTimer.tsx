@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Timer, X, Minus, Plus, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatClock, REST_START_EVENT, SET_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
+import { onVoiceCommand, speak } from '@/lib/voice/core'
 
 const AUTO_KEY = 'peac-rest-auto'
 const PRESETS = [60, 90, 120, 180]
@@ -70,14 +71,27 @@ export function RestTimer() {
     }
   }, [])
 
+  // Voice: "skip rest", "add 30 seconds"
+  useEffect(() => {
+    if (endAt === null) return
+    return onVoiceCommand(async cmd => {
+      if (cmd.type === 'skip_rest') { close(); await speak("Rest skipped. Let's go."); return true }
+      if (cmd.type === 'add_rest') { adjust(cmd.seconds); await speak(`Added ${cmd.seconds} seconds.`); return true }
+      return false
+    }, 20)
+  })
+
   // Tick
   useEffect(() => {
     if (endAt === null || finished) return
+    let warned = (endAt - Date.now()) / 1000 <= 12
     const id = setInterval(() => {
       const t = Date.now()
       setNow(t)
+      if (!warned && (endAt - t) / 1000 <= 10) { warned = true; speak('10 seconds. Get ready.') }
       if (t >= endAt) {
         setFinished(true)
+        speak('Rest is over. Next set.')
         beep()
         try { navigator.vibrate?.([300, 150, 300, 150, 300]) } catch { /* not supported */ }
       }

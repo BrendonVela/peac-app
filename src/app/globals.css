@@ -98,3 +98,9 @@ html {
     display: none;
   }
 }
+
+/* Voice coach mic: move up out of the way while the rest timer is showing */
+body:has(.rest-timer) .voice-coach { bottom: calc(env(safe-area-inset-bottom) + 10rem) !important; }
+@media (max-width: 767px) {
+  body:has(.rest-timer) .voice-coach { bottom: calc(env(safe-area-inset-bottom) + 14.5rem) !important; }
+}
