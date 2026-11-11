@@ -3,8 +3,9 @@ import { athleteMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { TEST_META, ALL_TEST_TYPES, formatDate } from '@/lib/utils'
-import type { PerformanceTest, CheckIn, TestType } from '@/types'
+import { formatDate } from '@/lib/utils'
+import { loadTestDefs } from '@/lib/tests'
+import type { PerformanceTest, CheckIn } from '@/types'
 import { PerformanceChart } from './PerformanceChart'
 import { ReadinessChart } from './ReadinessChart'
 import { LiftProgress } from '@/components/LiftProgress'
@@ -17,7 +18,7 @@ export default async function ProgressPage() {
 
   const { data: athlete } = await supabase
     .from('athletes')
-    .select('id')
+    .select('id, coach_id')
     .match(await athleteMatch(supabase, user.id))
     .single()
 
@@ -44,11 +45,12 @@ export default async function ProgressPage() {
     getLiftHistory(supabase, athlete.id),
   ])
 
-  // Group tests by type
-  const testsByType = new Map<TestType, PerformanceTest[]>()
+  // Group tests by type (built-in + the team's own tests)
+  const testDefs = await loadTestDefs(supabase, athlete.coach_id)
+  const testsByType = new Map<string, PerformanceTest[]>()
   tests?.forEach(t => {
-    if (!testsByType.has(t.test_type as TestType)) testsByType.set(t.test_type as TestType, [])
-    testsByType.get(t.test_type as TestType)!.push(t as PerformanceTest)
+    if (!testsByType.has(t.test_type)) testsByType.set(t.test_type, [])
+    testsByType.get(t.test_type)!.push(t as PerformanceTest)
   })
 
   const completionRate = results && results.length > 0
@@ -103,10 +105,10 @@ export default async function ProgressPage() {
       )}
 
       {/* Performance test charts */}
-      {ALL_TEST_TYPES.map(testType => {
+      {testDefs.map(meta => {
+        const testType = meta.key
         const typeTests = testsByType.get(testType)
         if (!typeTests || typeTests.length === 0) return null
-        const meta = TEST_META[testType]
         const latest = typeTests[typeTests.length - 1]
         const first = typeTests[0]
         const improved = meta.higherIsBetter

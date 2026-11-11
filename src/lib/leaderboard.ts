@@ -3,12 +3,12 @@
 
 import { LIFTS, liftForExercise, type LiftKey } from './maxes'
 import { estimateMax } from './liftHistory'
-import { TEST_META } from './utils'
+import { BUILT_IN_TESTS, customToDef } from './tests'
 import { toLocalISO } from './schedule'
 import { fetchAll } from './fetchAll'
 import type { TestType } from '@/types'
 
-export type MetricKey = LiftKey | Exclude<TestType, 'body_weight'>
+export type MetricKey = LiftKey | Exclude<TestType, 'body_weight'> | `custom:${string}`
 
 export interface BoardRow {
   athleteId: string
@@ -38,7 +38,7 @@ export async function getTeamBoard(admin: any, coachId: string) {
   const nameOf = new Map(list.map(a => [a.id, a.name]))
   if (ids.length === 0) return { athletes: list, metrics: [] as Metric[] }
 
-  const [{ data: maxRows }, { data: tests }, { data: results }] = await Promise.all([
+  const [{ data: maxRows }, { data: tests }, { data: results }, customRes] = await Promise.all([
     admin.from('athlete_maxes').select('athlete_id, lift, value, updated_at').in('athlete_id', ids),
     admin.from('performance_tests').select('athlete_id, test_type, result, date').in('athlete_id', ids),
     fetchAll<any>((from, to) =>
@@ -48,7 +48,12 @@ export async function getTeamBoard(admin: any, coachId: string) {
         .in('athlete_id', ids)
         .order('logged_at', { ascending: false })
         .range(from, to), 1000, 20000),
+    admin.from('custom_tests').select('id, label, unit, higher_is_better').eq('coach_id', coachId).order('label'),
   ])
+  const testDefs = [
+    ...BUILT_IN_TESTS.filter(t => TEST_KEYS.includes(t.key as never)),
+    ...(customRes?.error ? [] : (customRes?.data ?? []).map(customToDef)),
+  ]
 
   // athlete -> lift -> best
   const best = new Map<string, Map<LiftKey, BoardRow>>()
@@ -92,8 +97,8 @@ export async function getTeamBoard(admin: any, coachId: string) {
     metrics.push({ key, label: key === 'db_bench' ? `${label} (per DB)` : label, unit: 'lb', higherIsBetter: true, kind: 'lift', rows })
   }
 
-  for (const t of TEST_KEYS) {
-    const meta = TEST_META[t]
+  for (const meta of testDefs) {
+    const t = meta.key as MetricKey
     const bestByAthlete = new Map<string, BoardRow>()
     for (const row of (tests ?? []) as any[]) {
       if (row.test_type !== t) continue

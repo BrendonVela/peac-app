@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { getReadinessBadge, getReadinessLabel, formatDate, TEST_META } from '@/lib/utils'
+import { getReadinessBadge, getReadinessLabel, formatDate } from '@/lib/utils'
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
+import { loadTestDefs, findTest } from '@/lib/tests'
 import { PhaseDatesForm } from './PhaseDatesForm'
 import { MaxesForm } from './MaxesForm'
 import { ManageAthlete } from './ManageAthlete'
@@ -35,6 +36,8 @@ export default async function AthleteDetailPage({
     .single()
 
   if (!athlete) notFound()
+
+  const testDefs = await loadTestDefs(supabase, athlete.coach_id)
 
   const [{ data: checkIns }, { data: tests }, schedule, { data: maxRows }, lifts, { data: isAdmin }, { data: sessionRows }] = await Promise.all([
     supabase
@@ -218,7 +221,7 @@ export default async function AthleteDetailPage({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Performance Tests</CardTitle>
-          <AddPerformanceTestForm athleteId={params.id} />
+          <AddPerformanceTestForm athleteId={params.id} tests={testDefs} />
         </CardHeader>
         <CardContent className="px-0 py-0">
           {tests && tests.length > 0 ? (
@@ -226,7 +229,7 @@ export default async function AthleteDetailPage({
               {tests.map(test => (
                 <div key={test.id} className="flex items-center justify-between px-5 py-3.5">
                   <div>
-                    <p className="text-sm font-medium text-white">{TEST_META[test.test_type as keyof typeof TEST_META]?.label}</p>
+                    <p className="text-sm font-medium text-white">{findTest(testDefs, test.test_type)?.label ?? 'Test'}</p>
                     <p className="text-xs text-zinc-500">{formatDate(test.date)}</p>
                   </div>
                   <span className="text-lg font-bold text-blue-400">
