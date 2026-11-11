@@ -35,7 +35,7 @@ export default function AthleteMessagesPage() {
       setMyUserId(user.id)
 
       const [{ data: athlete }, { data: extra }, { data: unreadRows }] = await Promise.all([
-        supabase.from('athletes').select('id, coach_id, coaches(user_id, name)').eq('user_id', user.id).single(),
+        supabase.from('athletes').select('id, coach_id, coaches(user_id, name)').eq('user_id', user.id).maybeSingle(),
         supabase.rpc('message_contacts'),
         supabase.from('messages').select('sender_id').eq('receiver_id', user.id).eq('read', false),
       ])
