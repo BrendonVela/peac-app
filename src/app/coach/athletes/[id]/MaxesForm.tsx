@@ -42,10 +42,7 @@ export function MaxesForm({ athleteId, initial, updatedAt }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {LIFTS.map(l => (
           <div key={l.key} className="space-y-1.5">
-            <label className="block text-xs font-medium text-zinc-400">
-              {l.label}
-              {l.hint && <span className="block text-[10px] text-zinc-600 font-normal">{l.hint}</span>}
-            </label>
+            <label className="block truncate text-xs font-medium text-zinc-400" title={l.label}>{l.label}</label>
             <div className="relative">
               <input
                 value={values[l.key]}
@@ -57,6 +54,7 @@ export function MaxesForm({ athleteId, initial, updatedAt }: Props) {
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">lb</span>
             </div>
+            {l.hint && <p className="text-[10px] text-zinc-600">{l.hint}</p>}
           </div>
         ))}
       </div>
