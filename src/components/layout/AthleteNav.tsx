@@ -22,7 +22,7 @@ export function AthleteNav({ brand = null }: { brand?: NavBrand | null }) {
     <AppNav
       brand={brand}
       items={nav}
-      tabs={['/athlete/dashboard', '/athlete/calendar', '/athlete/checkin', '/athlete/messages']}
+      tabs={['/athlete/dashboard', '/athlete/calendar', '/athlete/progress', '/athlete/messages']}
     />
   )
 }
