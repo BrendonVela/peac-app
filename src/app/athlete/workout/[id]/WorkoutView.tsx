@@ -251,7 +251,7 @@ export async function WorkoutView({
     steps.push({
       key: 'warmup', kind: 'warmup', section: null, title: warmup?.title || 'Warm-up',
       exerciseIds: [], labels: [], sets: 0, restLabel: null,
-      say: `Warm-up. ${warmupItems.slice(0, 12).join('. ')}. Check them off as you go, then say next.`,
+      say: `the warm-up. ${warmupItems.slice(0, 12).join('. ')}. Let me know when it's completed.`,
     })
     cards.push(
       <WarmupChecklist
@@ -288,7 +288,7 @@ export async function WorkoutView({
         title: `Superset ${letter}: ${labels.map(l => l.name.split(/[—(]/)[0].trim()).join(' + ')}`,
         exerciseIds: members.map(m => m.id), labels, sets, restLabel,
         restSeconds: restFromText(section)?.seconds ?? restForExercise(members[members.length - 1]).seconds,
-        say: `Superset ${letter}. ${sets} rounds. Do one set of each, in order, then rest${restLabel ? ` ${restLabel}` : ''}. ${members.map((m, k) => sayExercise(m, labels[k].tag)).join(' ')} Tell me your weight and reps after each set, like "135 for 10".`,
+        say: `Superset ${letter}, ${sets} rounds. ${members.map((m, k) => sayExercise(m, labels[k].tag)).join(' ')} Do one set of each, then rest${restLabel ? ` ${restLabel}` : ''}. Let me know when each set is done, or tell me your weight and reps.`,
       })
       cards.push(
         <div key={`g-${wx.id}`} className="space-y-3 border-l-2 border-orange-500/50 pl-3">
@@ -302,7 +302,7 @@ export async function WorkoutView({
         title: wx.exercises?.title ?? 'Exercise',
         exerciseIds: [wx.id], labels: [], sets: targets.length, restLabel: restForExercise(wx).label,
         restSeconds: restForExercise(wx).seconds,
-        say: `${sayExercise(wx, null)}${restForExercise(wx).label ? ` Rest ${restForExercise(wx).label} between sets.` : ''} After each set, tell me what you did, like "185 for 5", or just say done.`,
+        say: `${sayExercise(wx, null)}${restForExercise(wx).label ? ` Rest ${restForExercise(wx).label} between sets.` : ''} Let me know when each set is completed, or tell me your weight and reps, like 185 for 5.`,
       })
       cards.push(renderExercise(wx, i, null))
     }

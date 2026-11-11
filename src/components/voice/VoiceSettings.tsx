@@ -84,6 +84,13 @@ export function VoiceSettings() {
               </div>
               <Switch on={s.autoListen} onChange={v => update({ autoListen: v })} label="Answer out loud" />
             </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-white">Say &quot;Hey PEAC&quot;</p>
+                <p className="text-xs text-zinc-500">Hands-free: while the app is open, I listen for &quot;Hey PEAC&quot;, then your command — like &quot;Hey PEAC, 185 for 5&quot;. Uses a bit more battery. Nothing is saved.</p>
+              </div>
+              <Switch on={s.wakeWord} onChange={v => update({ wakeWord: v })} label="Hey PEAC" />
+            </div>
             {!canListen() && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
                 This browser can&apos;t listen, so you&apos;ll answer with taps. Listening works best in Chrome (Android) or Safari/Chrome on iPhone rather than the home-screen app.

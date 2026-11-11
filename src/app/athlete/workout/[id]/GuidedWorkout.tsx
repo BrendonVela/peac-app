@@ -106,20 +106,31 @@ export function GuidedWorkout({
   const stepWords = (i: number) => {
     const s = steps[i]
     if (!s) return ''
-    return `Step ${i + 1} of ${steps.length}. ${s.say ?? s.title}`
+    const lead = i === 0 ? 'First up, we have' : i === steps.length - 1 ? 'Last one. We have' : 'Next up, we have'
+    return `${lead} ${s.say ?? s.title}`
   }
   useEffect(() => {
     if (finished || mode !== 'guided' || !getVoiceSettings().enabled) return
-    const intro = firstSay.current ? "Let's go. " : ''
+    const intro = firstSay.current ? "Alright, let's get after it. " : ''
     firstSay.current = false
     const t = setTimeout(() => speak(intro + stepWords(index)), 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, finished, mode])
 
+  /** After the last set of a step: move on by itself (step-by-step mode) */
+  function advanceAfterDone(si: number) {
+    if (mode !== 'guided' || si !== index) return
+    if (si >= steps.length - 1) finishByVoice()
+    else go(si + 1)
+  }
+
   function finishByVoice() {
     setFinished(true)
-    speak(`Workout ${doneEx === totalEx ? 'complete' : 'saved'}! ${doneEx} of ${totalEx} exercises done. Rate how hard it was on the screen, from 1 to 10. Great work today.`)
+    // Count straight from the exercises (the screen's count can be a moment behind)
+    const ids = steps.flatMap(x => x.exerciseIds)
+    const n = ids.filter(id => { const api = getLogger(id); return api ? api.doneSets() >= api.total : done[id] }).length
+    speak(`Workout ${n === ids.length ? 'complete' : 'saved'}! ${n} of ${ids.length} exercises done. Rate how hard it was on the screen, from 1 to 10. Great work today.`)
   }
 
   /** Which step voice logging goes to: the open step in step-by-step, else the first unfinished one */
@@ -142,7 +153,7 @@ export function GuidedWorkout({
         const si = voiceStepIndex()
         const st = steps[si]
         if (!st) return false
-        if (st.kind === 'warmup') { await speak('Warm-up done. Moving on.'); go(si + 1); return true }
+        if (st.kind === 'warmup') { await speak('Nice, warm-up done.'); go(si + 1); return true }
         // The exercise to log: the one with the fewest sets done (keeps a superset in order)
         const apis = st.exerciseIds.map((id, k) => ({ id, k, api: getLogger(id) })).filter(x => x.api)
         if (!apis.length) return false
@@ -156,14 +167,16 @@ export function GuidedWorkout({
         if (st.kind === 'group') {
           const counts = apis.map(x => x.api!.doneSets())
           const allDone = apis.every(x => x.api!.doneSets() >= x.api!.total)
-          if (allDone) say += `Superset done! Say next ${next ? `for ${next.title}` : 'to finish'}.`
+          if (allDone) { await speak(say + 'Superset done. Great work.'); advanceAfterDone(si); return true }
           else if (counts.every(c => c === counts[0])) say += `Round ${counts[0]} done. Rest ${st.restLabel ?? formatClock(st.restSeconds ?? 90)}.`
           else {
             const nxt = apis.find(x => x.api!.doneSets() < Math.max(...counts)) ?? apis[0]
             say += `Now ${st.labels[nxt.k]?.tag ?? ''}, ${st.labels[nxt.k]?.name ?? nxt.api!.title}.`
           }
         } else if (res.allDone) {
-          say += `That's every set. Nice work. ${next ? `Say next for ${next.title}.` : 'Say next to finish.'}`
+          await speak(say + "That's every set. Nice work.")
+          advanceAfterDone(si)
+          return true
         } else if (res.rested) {
           say += `Rest ${res.restLabel ?? formatClock(st.restSeconds ?? 90)}.`
         }

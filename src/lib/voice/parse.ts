@@ -93,8 +93,8 @@ export function parseCommand(raw: string): Command {
   if (/\b(talk|speak|go) slower\b|\bslow down\b/.test(t)) return { type: 'slower' }
   if (/\b(change|switch|different|new|another)\b.*\bvoice\b/.test(t)) return { type: 'change_voice' }
 
-  if (/^(yes|yeah|yep|yup|sure|correct|do it|send it|ok|okay|confirm|right|submit)\b/.test(t)) return { type: 'yes' }
-  if (/^(no|nope|nah|don't|do not|wrong)\b/.test(t)) return { type: 'no' }
+  if (/^(yes|yeah|yep|yup|sure|correct|do it|send it|ok|okay|confirm|right|submit)( please| do it| send it| go ahead)?$/.test(t)) return { type: 'yes' }
+  if (/^(no|nope|nah|don't|do not|wrong)( thanks| thank you| don't send it)?$/.test(t)) return { type: 'no' }
   if (/^(skip|pass|next question|skip it|skip this)$/.test(t)) return { type: 'skip' }
 
   // Rest timer
@@ -133,7 +133,7 @@ export function parseCommand(raw: string): Command {
   if (m && !/what|max|best/.test(t)) return { type: 'log', weight: Number(m[1]), reps: null }
   m = t.match(/^(?:did |got |i did |i got )?(\d+)\s*reps?$/)
   if (m) return { type: 'log', weight: null, reps: Number(m[1]) }
-  if (/^(done|finished|set done|done with (that|this|the) set|complete|completed|got it|logged|check|check it( off)?)$/.test(t)) return { type: 'done' }
+  if (/^(?:(?:i'?m|i am|it'?s|that'?s|we'?re|ok|okay|alright|all)\s+)?(done|finished|set done|done with (that|this|the|it)( set)?|complete|completed|got it|logged|check|check it( off)?|finished it|did it|i did it|i finished)$/.test(t)) return { type: 'done' }
 
   // Questions about numbers
   if (/\b(where am i|what place|my rank|ranking|leader ?board)\b/.test(t) && !/^(open|go to|show)/.test(t)) {
@@ -162,4 +162,12 @@ export function answerNumber(raw: string, min = 1, max = 10): number | null {
   if (!m) return null
   const v = Math.round(Number(m[1]))
   return v >= min && v <= max ? v : null
+}
+
+/** "Hey PEAC" (and how phones tend to hear it). Returns the words after it, or null if it wasn't said. */
+const WAKE = /\b(?:hey|hi|hay|okay|ok|yo)[,.!\s]+(?:peac|peak|peek|peake|pique|peke|pete|peet|peat|piece|pk|pec|p\.?\s?e\.?\s?a\.?\s?c\.?)\b[,.!?\s]*/i
+export function afterWakeWord(text: string): string | null {
+  const m = text.match(WAKE)
+  if (!m || m.index === undefined) return null
+  return text.slice(m.index + m[0].length).trim()
 }

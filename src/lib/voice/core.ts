@@ -3,7 +3,7 @@
 // and a small command bus so any screen can react to what the athlete says. Free — nothing leaves the phone
 // except what the browser's own speech service needs.
 
-import { parseCommand, type Command } from './parse'
+import { afterWakeWord, parseCommand, type Command } from './parse'
 
 // ---------------- Settings ----------------
 export interface VoiceSettings {
@@ -11,9 +11,10 @@ export interface VoiceSettings {
   voiceURI: string | null   // chosen voice (null = best English voice on this phone)
   rate: number              // 0.8 – 1.4
   autoListen: boolean       // after a question, listen for the answer automatically
+  wakeWord: boolean         // quietly listen for "Hey PEAC"
 }
 const KEY = 'peac-voice'
-const DEFAULTS: VoiceSettings = { enabled: true, voiceURI: null, rate: 1, autoListen: true }
+const DEFAULTS: VoiceSettings = { enabled: true, voiceURI: null, rate: 1, autoListen: true, wakeWord: true }
 const settingSubs = new Set<(s: VoiceSettings) => void>()
 
 export function getVoiceSettings(): VoiceSettings {
@@ -24,6 +25,8 @@ export function setVoiceSettings(patch: Partial<VoiceSettings>) {
   try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* private mode */ }
   settingSubs.forEach(f => f(next))
   if (!next.enabled) stopSpeaking()
+  if (!next.enabled || !next.wakeWord) stopWake()
+  else scheduleWake()
 }
 export function onVoiceSettings(f: (s: VoiceSettings) => void) { settingSubs.add(f); return () => { settingSubs.delete(f) } }
 
@@ -31,7 +34,12 @@ export function onVoiceSettings(f: (s: VoiceSettings) => void) { settingSubs.add
 export type VoiceStatus = { state: 'idle' | 'speaking' | 'listening' | 'thinking'; text: string }
 let status: VoiceStatus = { state: 'idle', text: '' }
 const statusSubs = new Set<(s: VoiceStatus) => void>()
-function setStatus(s: VoiceStatus) { status = s; statusSubs.forEach(f => f(s)) }
+function setStatus(s: VoiceStatus) {
+  status = s
+  statusSubs.forEach(f => f(s))
+  if (s.state === 'idle') scheduleWake()
+  else stopWake()
+}
 export function onVoiceStatus(f: (s: VoiceStatus) => void) { statusSubs.add(f); f(status); return () => { statusSubs.delete(f) } }
 export const thinking = (on: boolean) => setStatus(on ? { state: 'thinking', text: '' } : { state: 'idle', text: '' })
 
@@ -84,6 +92,7 @@ export function speak(text: string, opts: { force?: boolean } = {}): Promise<voi
   // The shared weight-room tablet stays quiet
   if (!opts.force && window.location.pathname.startsWith('/kiosk')) return Promise.resolve()
   stopListening()
+  stopWake()
   window.speechSynthesis.cancel()
   const token = ++speakToken
   const clean = speakable(text)
@@ -133,6 +142,7 @@ export function listenOnce(maxMs = 8000): Promise<string> {
   const R = Recognition()
   if (!R) return Promise.reject(new Error('Voice commands are not supported in this browser. Try Chrome, or use the buttons.'))
   stopListening()
+  stopWake()
   if (canSpeak()) window.speechSynthesis.cancel()
   return new Promise((resolve, reject) => {
     const rec = new R()
@@ -211,3 +221,79 @@ export interface LoggerApi {
 const loggers = new Map<string, LoggerApi>()
 export function registerLogger(id: string, api: LoggerApi) { loggers.set(id, api); return () => { if (loggers.get(id) === api) loggers.delete(id) } }
 export function getLogger(id: string) { return loggers.get(id) ?? null }
+
+// ---------------- "Hey PEAC" (hands-free) ----------------
+// Quietly listens in the background while the app is open and idle. Hearing "Hey PEAC" calls the
+// handler with whatever came after it ("Hey PEAC, next" -> "next"; just "Hey PEAC" -> "").
+type WakeHandler = (rest: string) => void
+let wakeHandler: WakeHandler | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let wakeRec: any = null
+let wakeTimer: ReturnType<typeof setTimeout> | null = null
+let wakeBlocked = false
+const wakeSubs = new Set<(on: boolean) => void>()
+const setWakeOn = (on: boolean) => wakeSubs.forEach(f => f(on))
+export function onWakeState(f: (on: boolean) => void) { wakeSubs.add(f); f(!!wakeRec); return () => { wakeSubs.delete(f) } }
+
+/** Turn the "Hey PEAC" listener on (with what to do when heard) or off (null) */
+export function setWakeHandler(handler: WakeHandler | null) {
+  wakeHandler = handler
+  if (handler) scheduleWake()
+  else stopWake()
+}
+
+function stopWake() {
+  if (wakeTimer) { clearTimeout(wakeTimer); wakeTimer = null }
+  const r = wakeRec
+  wakeRec = null
+  if (r) { try { r.onend = null; r.abort() } catch { /* ignore */ } setWakeOn(false) }
+}
+
+function scheduleWake(delay = 500) {
+  if (typeof window === 'undefined') return
+  if (wakeTimer) clearTimeout(wakeTimer)
+  wakeTimer = setTimeout(startWake, delay)
+}
+
+function startWake() {
+  wakeTimer = null
+  const s = getVoiceSettings()
+  const R = Recognition()
+  if (!wakeHandler || wakeBlocked || !R || !s.enabled || !s.wakeWord || wakeRec) return
+  if (status.state !== 'idle' || active || document.hidden) return
+  if (window.location.pathname.startsWith('/kiosk')) return
+  const rec = new R()
+  wakeRec = rec
+  rec.lang = 'en-US'
+  rec.continuous = true
+  rec.interimResults = true
+  let fired = false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rec.onresult = (e: any) => {
+    if (fired) return
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i]
+      const rest = afterWakeWord(r[0].transcript)
+      if (rest === null) continue
+      // Wait for the end of the sentence so "Hey PEAC, 185 for 5" comes through whole
+      if (!r.isFinal && rest) continue
+      fired = true
+      stopWake()
+      wakeHandler?.(r.isFinal ? rest : '')
+      return
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rec.onerror = (e: any) => {
+    if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') wakeBlocked = true
+  }
+  rec.onend = () => {
+    if (wakeRec === rec) { wakeRec = null; setWakeOn(false) }
+    if (!fired) scheduleWake(wakeBlocked ? 0 : 800) // keep listening (phones stop after a while)
+  }
+  try { rec.start(); setWakeOn(true) } catch { wakeRec = null; setWakeOn(false) }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopWake(); else scheduleWake() })
+}

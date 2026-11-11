@@ -6,7 +6,7 @@ import { Mic, X, Volume2, HelpCircle, Timer as TimerIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ask, canListen, dispatchVoice, getVoiceSettings, listVoices, listenOnce, onVoiceCommand, onVoiceSettings,
-  onVoiceStatus, setVoiceSettings, speak, stopListening, stopSpeaking, thinking, type VoiceStatus,
+  onVoiceStatus, onWakeState, setVoiceSettings, setWakeHandler, speak, stopListening, stopSpeaking, thinking, type VoiceStatus,
 } from '@/lib/voice/core'
 import { voiceCoach, voiceMove, voiceNextForm, voiceRank, voiceStat, voiceToday, voiceUnread, voiceWelcome } from '@/app/actions/voice'
 import { sendMessage } from '@/app/actions/messages'
@@ -15,6 +15,7 @@ import { formatClock } from '@/lib/rest'
 const WELCOMED = 'peac-voice-welcomed'
 
 export const VOICE_HELP: { title: string; lines: string[] }[] = [
+  { title: 'Hands-free', lines: ['Say "Hey PEAC" — then what you want ("Hey PEAC, 185 for 5")', 'Or tap the blue mic and talk'] },
   { title: 'Getting around', lines: ['"Open my calendar" / "Go to progress" / "Leaderboard"', '"What\'s my workout today?"', '"Let\'s go" — opens today\'s workout'] },
   { title: 'Check-in', lines: ['Answer each question with a number: "seven"', '"Yes" to submit'] },
   { title: 'During a workout', lines: ['"185 for 5" or "5 reps at 185" — logs the next set', '"Done" — logs the set as written', '"Next" / "Back" / "Repeat" / "What\'s next?"', '"Skip rest" / "Add 30 seconds"'] },
@@ -33,6 +34,22 @@ export function VoiceCoach() {
   const [timerEnd, setTimerEnd] = useState<number | null>(null)
   const [now, setNow] = useState(0)
   const busy = useRef(false)
+  const [wakeOn, setWakeOn] = useState(false)
+  useEffect(() => onWakeState(setWakeOn), [])
+
+  // "Hey PEAC": starts after the first tap (phones need a tap before using the mic)
+  useEffect(() => {
+    const arm = () => {
+      setWakeHandler(async rest => {
+        if (rest) { await handleSaid(rest); return }
+        await speak('Yes?')
+        try { await handleSaid(await listenOnce(7000)) } catch (e) { setReply((e as Error).message) }
+      })
+    }
+    window.addEventListener('pointerdown', arm, { once: true, capture: true })
+    return () => { window.removeEventListener('pointerdown', arm, true); setWakeHandler(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const pending = useRef<{ to: string; text: string } | null>(null)
 
   useEffect(() => onVoiceStatus(setSt), [])
@@ -199,11 +216,12 @@ export function VoiceCoach() {
           onClick={tap}
           aria-label={st.state === 'listening' ? 'Stop listening' : st.state === 'speaking' ? 'Stop talking' : 'Talk to your coach'}
           className={cn(
-            'w-14 h-14 rounded-full flex items-center justify-center shadow-2xl border transition-transform active:scale-95',
+            'relative w-14 h-14 rounded-full flex items-center justify-center shadow-2xl border transition-transform active:scale-95',
             st.state === 'listening' ? 'bg-red-600 border-red-400 animate-pulse' : st.state === 'speaking' ? 'bg-blue-500 border-blue-300' : 'bg-blue-600 border-blue-500'
           )}
         >
           {st.state === 'speaking' ? <Volume2 className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
+          {wakeOn && st.state === 'idle' && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-zinc-950" title='Listening for "Hey PEAC"' />}
         </button>
       </div>
 
@@ -214,7 +232,7 @@ export function VoiceCoach() {
               <h2 className="text-lg font-bold text-white">What you can say</h2>
               <button onClick={() => setHelp(false)} className="text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-zinc-400 mb-4">Tap the blue mic, then talk. Tap it again to stop me talking.</p>
+            <p className="text-xs text-zinc-400 mb-4">Say <b className="text-white">&quot;Hey PEAC&quot;</b> or tap the blue mic, then talk. A green dot on the mic means I&apos;m listening for &quot;Hey PEAC&quot;. Tap the mic again to stop me talking.</p>
             <div className="space-y-4">
               {VOICE_HELP.map(g => (
                 <div key={g.title}>
