@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, CalendarDays, ExternalLink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, ExternalLink, List, CalendarRange } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -54,6 +54,17 @@ export function ScheduleCalendar({ items, athleteId, today, month, basePath, mod
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Phone view: Apple-style month grid or the list
+  const [phoneView, setPhoneView] = useState<'month' | 'list'>('month')
+  const [pickedDay, setPickedDay] = useState<string>(() => (today.startsWith(month) ? today : `${month}-01`))
+  useEffect(() => {
+    try { const v = localStorage.getItem('peac-cal-view'); if (v === 'list' || v === 'month') setPhoneView(v) } catch {}
+  }, [])
+  useEffect(() => { setPickedDay(today.startsWith(month) ? today : `${month}-01`) }, [month, today])
+  function chooseView(v: 'month' | 'list') {
+    setPhoneView(v)
+    try { localStorage.setItem('peac-cal-view', v) } catch {}
+  }
 
   // Build a Monday-first grid covering the whole month
   const firstOfMonth = `${month}-01`
@@ -190,8 +201,86 @@ export function ScheduleCalendar({ items, athleteId, today, month, basePath, mod
         </div>
       </div>
 
+      {/* Phone: Month / List switch */}
+      <div className="sm:hidden flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+        {([['month', CalendarRange, 'Month'], ['list', List, 'List']] as const).map(([v, Icon, label]) => (
+          <button
+            key={v}
+            onClick={() => chooseView(v)}
+            className={cn('flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium', phoneView === v ? 'bg-zinc-700 text-white' : 'text-zinc-400')}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Phone month view (like Apple Calendar): dots under days, tap a day to see its workouts */}
+      {phoneView === 'month' && (
+        <div className="sm:hidden space-y-3">
+          <div className="grid grid-cols-7 text-center">
+            {WEEKDAYS.map(d => (
+              <div key={d} className="py-1 text-[11px] font-medium text-zinc-500">{d[0]}</div>
+            ))}
+            {days.map(d => {
+              const inMonth = d.startsWith(month)
+              const isToday = d === today
+              const isPicked = d === pickedDay
+              const dayItems = byDate.get(d) ?? []
+              return (
+                <button
+                  key={d}
+                  onClick={() => setPickedDay(d)}
+                  className="flex flex-col items-center gap-0.5 py-1.5 border-t border-zinc-800/70"
+                  aria-label={formatShortDate(d)}
+                >
+                  <span
+                    className={cn(
+                      'w-8 h-8 flex items-center justify-center rounded-full text-[15px]',
+                      isPicked
+                        ? isToday ? 'bg-blue-600 text-white font-semibold' : 'bg-white text-zinc-900 font-semibold'
+                        : isToday ? 'text-blue-400 font-semibold' : inMonth ? 'text-zinc-200' : 'text-zinc-700',
+                    )}
+                  >
+                    {Number(d.slice(8))}
+                  </span>
+                  <span className="flex h-1.5 items-center gap-0.5">
+                    {dayItems.slice(0, 3).map(item => (
+                      <span key={item.workoutId} className={cn('w-1.5 h-1.5 rounded-full', DOT[item.status], !inMonth && 'opacity-40')} />
+                    ))}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-2 border-t border-zinc-800 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+              {pickedDay === today ? 'Today · ' : ''}{formatShortDate(pickedDay)}
+            </p>
+            {(byDate.get(pickedDay) ?? []).length === 0 ? (
+              <p className="text-sm text-zinc-500 py-3">No workouts this day.</p>
+            ) : (
+              (byDate.get(pickedDay) ?? []).map(item => (
+                <button
+                  key={item.workoutId}
+                  onClick={() => open(item)}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-lg border border-zinc-800 bg-zinc-900 text-left"
+                >
+                  <span className={cn('w-1 self-stretch rounded-full shrink-0', DOT[item.status])} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate">{item.title}</p>
+                    <p className="text-xs text-zinc-500 truncate">{item.programTitle} · Week {item.weekNumber}</p>
+                  </div>
+                  <Badge variant={STATUS_BADGE[item.status]} className="shrink-0">{STATUS_LABEL[item.status]}</Badge>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Agenda list (phones) */}
-      <div className="sm:hidden space-y-2">
+      <div className={cn('sm:hidden space-y-2', phoneView !== 'list' && 'hidden')}>
         {monthItems.length === 0 && (
           <p className="text-sm text-zinc-500 text-center py-6">No workouts this month.</p>
         )}
