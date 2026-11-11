@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { mergeAthleteProfiles } from '@/app/actions/admin'
+import { APP_TIMEZONE } from '@/lib/schedule'
 
 export interface SignedUpAthlete {
   id: string
@@ -52,7 +53,7 @@ export function LinkAccount({ athleteId, name, candidates }: { athleteId: string
               <option value="">Pick their account…</option>
               {candidates.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} — signed up {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {c.name} — signed up {new Date(c.created_at).toLocaleDateString('en-US', { timeZone: APP_TIMEZONE, month: 'short', day: 'numeric' })}
                 </option>
               ))}
             </select>

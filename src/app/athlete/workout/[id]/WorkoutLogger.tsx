@@ -6,6 +6,7 @@ import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, typ
 import { saveOrQueue } from '@/lib/offlineQueue'
 import { FormVideoButton } from './FormVideoButton'
 import { cn } from '@/lib/utils'
+import { APP_TIMEZONE } from '@/lib/schedule'
 
 function getYouTubeEmbedUrl(url: string): string | null {
   if (!url) return null
@@ -78,7 +79,7 @@ function daysAgoLabel(iso: string): string {
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
   if (days < 14) return `${days} days ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString('en-US', { timeZone: APP_TIMEZONE, month: 'short', day: 'numeric' })
 }
 
 type Row = { weight: string; reps: string; done: boolean }

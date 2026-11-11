@@ -6,6 +6,7 @@ import { UserPlus, Copy, Check, Trash2, UserMinus } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { createStaffInvite, deleteStaffInvite, removeStaff } from '@/app/actions/staff'
+import { APP_TIMEZONE } from '@/lib/schedule'
 
 export function StaffPanel({ staff, invites }: {
   staff: { id: string; name: string; created_at: string }[]
@@ -51,7 +52,7 @@ export function StaffPanel({ staff, invites }: {
                 <div key={i.code} className="flex items-center gap-3 px-3 py-2.5">
                   <span className="flex-1 min-w-0">
                     <span className="block font-mono text-sm text-white truncate">/join-coach/{i.code}</span>
-                    <span className="block text-xs text-zinc-500">{i.note ? `${i.note} · ` : ''}expires {new Date(i.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span className="block text-xs text-zinc-500">{i.note ? `${i.note} · ` : ''}expires {new Date(i.expires_at).toLocaleDateString('en-US', { timeZone: APP_TIMEZONE, month: 'short', day: 'numeric' })}</span>
                   </span>
                   <button onClick={() => copy(i.code)} className="flex items-center gap-1 text-xs text-blue-400">
                     {copied === i.code ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}{copied === i.code ? 'Copied' : 'Copy link'}

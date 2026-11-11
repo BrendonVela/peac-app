@@ -19,6 +19,7 @@ import {
 } from '@/app/actions/admin'
 import { startViewAs } from '@/app/actions/viewAs'
 import { adminSetJoinCode } from '@/app/actions/invites'
+import { APP_TIMEZONE } from '@/lib/schedule'
 
 export interface Person {
   kind: 'coach' | 'athlete'
@@ -45,7 +46,7 @@ export interface CoachInvite {
 
 function fmt(ts: string | null) {
   if (!ts) return 'Never'
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(ts).toLocaleDateString('en-US', { timeZone: APP_TIMEZONE, month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 const selectCls =

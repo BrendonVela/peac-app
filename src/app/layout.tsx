@@ -12,6 +12,8 @@ export const metadata: Metadata = {
     statusBarStyle: 'black',
   },
   formatDetection: { telephone: false },
+  // Android/Chrome version of "can run full screen" (the Apple one above is still needed for iPhone)
+  other: { 'mobile-web-app-capable': 'yes' },
 }
 
 export const viewport: Viewport = {

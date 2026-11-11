@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { saveAthleteMaxes } from '@/app/actions/maxes'
 import { LIFTS } from '@/lib/maxes'
+import { APP_TIMEZONE } from '@/lib/schedule'
 
 interface Props {
   athleteId: string
@@ -62,7 +63,7 @@ export function MaxesForm({ athleteId, initial, updatedAt }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-zinc-500">
           Main-lift weights in their programs scale to these maxes. Leave blank to use the program&apos;s weights as written.
-          {updatedAt && <> Last updated {new Date(updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.</>}
+          {updatedAt && <> Last updated {new Date(updatedAt).toLocaleDateString('en-US', { timeZone: APP_TIMEZONE, month: 'short', day: 'numeric', year: 'numeric' })}.</>}
         </p>
         <div className="flex items-center gap-2">
           {msg && <span className={`text-xs ${msg === 'Saved' ? 'text-green-400' : 'text-red-400'}`}>{msg}</span>}
