@@ -8,6 +8,7 @@ import { WorkoutLogger } from './WorkoutLogger'
 import { WarmupChecklist } from './WarmupChecklist'
 import { RestTimer } from './RestTimer'
 import { GuidedWorkout, type GuidedStep } from './GuidedWorkout'
+import { CheckInGate } from './CheckInGate'
 import { restForExercise, restFromText } from '@/lib/rest'
 
 import { buildSetTargets, formatReps, targetsAreUniform, maxRatio, type AthleteMaxes } from '@/lib/setTargets'
@@ -20,6 +21,7 @@ export async function WorkoutView({
   backHref = '/athlete/dashboard',
   kiosk = false,
   weights = 'auto',
+  skipCheckIn = false,
 }: {
   athleteId: string
   workoutId: string
@@ -28,6 +30,8 @@ export async function WorkoutView({
   kiosk?: boolean
   /** 'full' = ignore the low-readiness weight drop for this visit */
   weights?: 'auto' | 'full'
+  /** No signal: let them start without today's check-in */
+  skipCheckIn?: boolean
 }) {
   const supabase = createClient()
   const athlete = { id: athleteId }
@@ -122,6 +126,8 @@ export async function WorkoutView({
   ])
   const rules = (coachRules as any)?.coaches as { readiness_low: number; readiness_cut: number; readiness_on: boolean } | null
   const readiness = todayCheckIn?.readiness_score != null ? Number(todayCheckIn.readiness_score) : null
+  // Today's check-in is required before the workout (not on the weight-room tablet)
+  const needsCheckIn = !kiosk && readiness === null && !skipCheckIn
   const lowReadiness = !!rules?.readiness_on && readiness !== null && readiness < Number(rules.readiness_low)
   const cutPct = Math.min(50, Math.max(0, Number(rules?.readiness_cut ?? 0)))
   const lighten = lowReadiness && weights !== 'full' && cutPct > 0
@@ -305,13 +311,9 @@ export async function WorkoutView({
           </Link>
         </div>
       )}
-      {!kiosk && readiness === null && !!rules?.readiness_on && (
-        <Link href="/athlete/checkin" className="block rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-300 hover:border-zinc-700">
-          💡 Do today&apos;s <b className="text-white">check-in</b> first — if you&apos;re run down, your weights adjust automatically.
-        </Link>
-      )}
-
-      {exercises.length > 0 || warmupItems.length > 0 ? (
+      {needsCheckIn ? (
+        <CheckInGate />
+      ) : exercises.length > 0 || warmupItems.length > 0 ? (
         <GuidedWorkout
           steps={steps}
           cards={cards}

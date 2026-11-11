@@ -87,38 +87,6 @@ export default async function AthleteDashboard() {
         </Link>
       )}
 
-      {/* Readiness */}
-      <Card className={!checkIn ? 'border-yellow-500/30' : ''}>
-        <CardContent className="py-5">
-          {checkIn ? (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-zinc-400 font-medium uppercase tracking-wide mb-1">Today&apos;s Readiness</p>
-                <div className={`inline-flex px-3 py-1.5 rounded-full text-sm font-bold ${getReadinessBadge(checkIn.readiness_score)}`}>
-                  {getReadinessLabel(checkIn.readiness_score)} — {checkIn.readiness_score.toFixed(1)}/10
-                </div>
-              </div>
-              <Link href="/athlete/checkin">
-                <Button variant="ghost" size="sm">Update</Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-zinc-400 font-medium uppercase tracking-wide mb-1">Daily Check-In</p>
-                <p className="text-sm text-zinc-300">How are you feeling today?</p>
-              </div>
-              <Link href="/athlete/checkin">
-                <Button size="sm">
-                  <Heart className="w-4 h-4" />
-                  Check In
-                </Button>
-              </Link>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* This Week */}
       {groups.length > 0 ? (
         groups.map(list => {

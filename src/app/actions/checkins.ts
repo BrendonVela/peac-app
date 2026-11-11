@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { athleteMatch } from '@/lib/acting'
 import { revalidatePath } from 'next/cache'
+import { todayISO } from '@/lib/schedule'
 
 export async function submitCheckIn(formData: FormData) {
   const supabase = createClient()
@@ -17,7 +18,7 @@ export async function submitCheckIn(formData: FormData) {
 
   if (!athlete) return { error: 'Athlete profile not found' }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayISO() // team's time zone, same as the workout page
   const sleep_quality = parseInt(formData.get('sleep_quality') as string)
   const energy = parseInt(formData.get('energy') as string)
   const stress = parseInt(formData.get('stress') as string)
@@ -38,4 +39,5 @@ export async function submitCheckIn(formData: FormData) {
   if (error) return { error: error.message }
   revalidatePath('/athlete/dashboard')
   revalidatePath('/athlete/checkin')
+  revalidatePath('/athlete/workout', 'layout')
 }
