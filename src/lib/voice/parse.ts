@@ -14,6 +14,9 @@ export type Command =
   | { type: 'form' } | { type: 'checkin' }
   | { type: 'yes' } | { type: 'no' } | { type: 'skip' }
   | { type: 'number'; value: number }
+  | { type: 'schedule'; when: string }   // today | tomorrow | monday… | week | next week | weekend
+  | { type: 'finish' }                   // "I finished the workout"
+  | { type: 'rest_left' }                // "how much rest is left"
   | { type: 'unknown'; text: string }
 
 const ONES: Record<string, number> = {
@@ -74,84 +77,116 @@ const PAGES: [RegExp, string, string][] = [
   [/\b(forms?|questionnaires?|surveys?)\b/, '/athlete/forms', 'forms'],
   [/\b(settings|preferences|account)\b/, '/athlete/settings', 'settings'],
 ]
-const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'today', 'tomorrow']
+const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+/** Words people add that don't change the meaning */
+const FILLER = /\b(um+|uh+|er+|hmm+|like|so|well|please|pls|just|actually|basically|real quick|quickly|for me|go ahead and|can you|could you|would you|will you|can i|could i|i want to|i wanna|i'?d like to|i need to|i'?m going to|i'?m gonna|let me|do me a favor and|hey|hi|yo|okay so|alright so|you know)\b/g
+
+/** When does the athlete mean? today / tomorrow / a weekday / this week / next week / weekend */
+function whenOf(t: string): string | null {
+  if (/\bnext week\b/.test(t)) return 'next week'
+  if (/\b(this|the) week(end)?\b|\brest of (the|this) week\b|\bweek\b/.test(t)) return /weekend/.test(t) ? 'weekend' : 'week'
+  if (/\bweekend\b/.test(t)) return 'weekend'
+  if (/\b(tomorrow|tmrw|tomorow)\b/.test(t)) return 'tomorrow'
+  if (/\b(today|tonight|this morning|this afternoon|right now|now)\b/.test(t)) return 'today'
+  const d = DAYS.find(x => new RegExp(`\\b${x}s?\\b`).test(t))
+  return d ?? null
+}
+
+const has = (t: string, re: RegExp) => re.test(t)
 
 export function parseCommand(raw: string): Command {
-  const original = raw.trim()
-  const t = normalizeNumbers(original).replace(/[.?!,]/g, ' ').replace(/\s+/g, ' ').trim()
-  if (!t) return { type: 'unknown', text: '' }
+  const original = (afterWakeWord(raw) ?? raw).trim()
+  const base = normalizeNumbers(original).replace(/[.?!,;:"]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!base) return { type: 'unknown', text: '' }
+  // Short replies are checked before removing filler words ("okay", "yes please")
+  if (/^(yes|yeah|yep|yup|sure|correct|do it|send it|ok|okay|confirm|right|submit|sounds good|go ahead)( please| do it| send it| go ahead)?$/.test(base)) return { type: 'yes' }
+  if (/^(no|nope|nah|don't|do not|wrong|cancel that)( thanks| thank you| don't send it)?$/.test(base)) return { type: 'no' }
+  if (/^(stop|stop talking|be quiet|quiet|shut up|cancel|never ?mind|pause|hold on|wait|shh+)$/.test(base)) return { type: 'stop' }
+  if (/^(skip|pass|skip it|skip this|next question)$/.test(base)) return { type: 'skip' }
+  let m = base.match(/^(\d+(?:\.\d+)?)$/)
+  if (m) return { type: 'number', value: Number(m[1]) }
 
-  // Messages first (free text after "message coach")
-  let m = original.match(/^(?:send (?:a )?message to|message|text|tell|send) (?:my )?coach(?: that)?[,:]?\s+(.+)$/i)
+  const t = (' ' + base + ' ').replace(FILLER, ' ').replace(/\s+/g, ' ').trim()
+
+  // ----- Messages (keep their words as said) -----
+  m = original.match(/(?:send (?:a )?(?:message|text) to|message|text|tell|let) (?:my )?coach(?: know)?(?: that)?[,:]?\s+(.+)$/i)
   if (m) return { type: 'message', text: m[1].trim() }
-  if (/\b(read|check|any|new|play)\b.*\bmessages?\b|\bmessages? from (my )?coach\b/.test(t)) return { type: 'read_messages' }
+  if (has(t, /\b(read|check|play|any|new|got|have i got|do i have)\b.*\bmessages?\b|\bmessages? from\b|\bdid (my )?coach (say|text|message|write)/)) return { type: 'read_messages' }
 
-  if (/^(help|what can i say|what do i say|commands|what can you do)\b/.test(t)) return { type: 'help' }
-  if (/^(stop|stop talking|be quiet|quiet|shut up|cancel|never ?mind|pause)$/.test(t)) return { type: 'stop' }
-  if (/\b(turn off|mute|disable)\b.*\b(voice|coach|talking|you)\b|^(mute|voice off)$/.test(t)) return { type: 'voice_off' }
-  if (/\b(talk|speak|go) faster\b|\bspeed up\b/.test(t)) return { type: 'faster' }
-  if (/\b(talk|speak|go) slower\b|\bslow down\b/.test(t)) return { type: 'slower' }
-  if (/\b(change|switch|different|new|another)\b.*\bvoice\b/.test(t)) return { type: 'change_voice' }
+  // ----- The voice itself -----
+  if (has(t, /what can (i|you) (say|do|ask)|\bhelp\b|\bcommands\b|how do (i|you) (use|work|talk)/)) return { type: 'help' }
+  if (has(t, /\b(turn off|mute|disable|shut off)\b.*\b(voice|coach|talking|you|sound)\b|^(mute|voice off)$/)) return { type: 'voice_off' }
+  if (has(t, /\b(talk|speak|go|read) (a (little|bit) )?faster\b|\bspeed (it )?up\b/)) return { type: 'faster' }
+  if (has(t, /\b(talk|speak|go|read) (a (little|bit) )?slower\b|\bslow (it )?down\b/)) return { type: 'slower' }
+  if (has(t, /\b(change|switch|different|new|another|other)\b.*\bvoice\b/)) return { type: 'change_voice' }
 
-  if (/^(yes|yeah|yep|yup|sure|correct|do it|send it|ok|okay|confirm|right|submit)( please| do it| send it| go ahead)?$/.test(t)) return { type: 'yes' }
-  if (/^(no|nope|nah|don't|do not|wrong)( thanks| thank you| don't send it)?$/.test(t)) return { type: 'no' }
-  if (/^(skip|pass|next question|skip it|skip this)$/.test(t)) return { type: 'skip' }
-
-  // Rest timer
-  if (/\b(skip|end|stop|cancel)\b.*\brest\b|\bdone resting\b/.test(t)) return { type: 'skip_rest' }
-  m = t.match(/\b(?:add|more|another|plus)\b(?: (\d+))?\s*(seconds?|secs?|minutes?|mins?)?(?: (?:of )?(?:rest|time))?/)
-  if (m && /\b(rest|time|seconds?|minutes?)\b/.test(t) && !/\btimer\b/.test(t)) {
+  // ----- Rest timer -----
+  if (has(t, /\bhow (much|long)\b.*\b(rest|time|left)\b|\btime left\b|\brest left\b/) && !has(t, /\btimer for\b/)) return { type: 'rest_left' }
+  if (has(t, /\b(skip|end|stop|cancel|done with|over)\b.*\brest(ing)?\b|\bdone resting\b|\bno rest\b/)) return { type: 'skip_rest' }
+  m = t.match(/\b(?:add|more|another|extra|plus|give me)\b(?: (\d+))?\s*(seconds?|secs?|minutes?|mins?)?/)
+  if (m && has(t, /\b(rest|time|seconds?|minutes?|break)\b/) && !has(t, /\btimer\b/)) {
     const n = m[1] ? Number(m[1]) : 30
     return { type: 'add_rest', seconds: /^m/.test(m[2] ?? '') ? n * 60 : n }
   }
 
-  // Timer
-  m = t.match(/\b(?:start|set|run)?\s*(?:a |an )?(?:timer (?:for )?)?(\d+(?:\.\d+)?)\s*(minutes?|mins?|seconds?|secs?)\s*(?:timer)?/)
-  if (m && /\btimer\b/.test(t)) return { type: 'timer', seconds: Math.round(Number(m[1]) * (/^m/.test(m[2]) ? 60 : 1)) }
-  if (/\b(stop|cancel|end)\b.*\btimer\b/.test(t)) return { type: 'stop_timer' }
+  // ----- Timer -----
+  m = t.match(/(\d+(?:\.\d+)?)\s*(minutes?|mins?|seconds?|secs?)/)
+  if (m && has(t, /\btimer\b|\bcount ?down\b|\btime me\b/)) return { type: 'timer', seconds: Math.round(Number(m[1]) * (/^m/.test(m[2]) ? 60 : 1)) }
+  if (has(t, /\b(stop|cancel|end|kill)\b.*\btimer\b/)) return { type: 'stop_timer' }
 
-  // Move a workout
-  m = t.match(/\bmove\b.*\b(?:workout|session|lift|training)?\b.*\bto\b\s+(?:next\s+)?(\w+)/)
-  if (m && DAYS.includes(m[1])) return { type: 'move', day: m[1] }
+  // ----- Moving a workout -----
+  if (has(t, /\b(move|reschedule|push|switch|change|shift|swap)\b/) && has(t, /\b(workout|training|lift|session|it|today'?s|day)\b/)) {
+    const w = t.match(/\bto\s+(?:next\s+|this\s+)?(\w+)/)?.[1]
+    const day = w && (DAYS.includes(w.replace(/s$/, '')) || w === 'tomorrow' || w === 'today') ? w.replace(/s$/, '') : null
+    if (day) return { type: 'move', day }
+  }
 
-  // Workout flow
-  if (/^(let'?s go|let'?s do (it|this)|let'?s get (it|started|going)|start( my)?( the)? workout|get started|begin|i'?m ready|ready|start|go)$/.test(t)) return { type: 'start' }
-  if (/what'?s next|what is next|what'?s after this|what comes next/.test(t)) return { type: 'whats_next' }
-  if (/what('?s| is| do i have)? (my |the )?(workout|lift|training|session)( today| for today)?|what do i have today|today'?s workout/.test(t)) return { type: 'today' }
-  if (/^(next|next (one|exercise|step|set|up)|move on|go on|keep going|continue)$/.test(t)) return { type: 'next' }
-  if (/^(back|go back|previous|last (one|exercise|step))$/.test(t)) return { type: 'back' }
-  if (/\b(repeat|say (that|it) again|again|what was that|one more time)\b/.test(t)) return { type: 'repeat' }
-  if (/\b(fill (out|in)|do|start|open)\b.*\bforms?\b/.test(t)) return { type: 'form' }
-  if (/\b(do|start|take|fill out)\b.*\bcheck ?in\b|^check ?in$/.test(t)) return { type: 'checkin' }
+  // ----- Finished the whole workout -----
+  if (has(t, /\b(done|finished|completed|complete|wrapped up|through|all done)\b.*\b(workout|session|training|lift|lifting|everything|today)\b|\b(end|finish|complete|wrap up|close out)\b.*\b(workout|session)\b/)) return { type: 'finish' }
 
-  // Logging sets: "185 for 5", "5 reps at 185", "did 8", "135 pounds"
+  // ----- Schedule questions -----
+  const when = whenOf(t)
+  if (when && has(t, /\b(what|what'?s|whats|anything|do i have|is there|have i got|schedule|scheduled|plan|planned|lifting|lift|training|train|workout|workouts|on deck|coming up|supposed to)\b/) && !has(t, /\b(max|pr|record|rank|place|leaderboard)\b/)) {
+    return { type: 'schedule', when }
+  }
+  if (has(t, /\bwhat('?s| is| do i have)?\b.*\b(my |the )?(workout|lift|training|session)\b|\bwhat do i have\b|\bwhat am i doing\b/)) return { type: 'schedule', when: 'today' }
+
+  // ----- Forms / check-in -----
+  if (has(t, /\b(fill( out| in)?|do|start|open|take|complete|answer)\b.*\b(forms?|questionnaires?|survey)\b/)) return { type: 'form' }
+  if (has(t, /\bcheck ?-?in\b/) && !has(t, /\b(go to|open|show)\b/)) return { type: 'checkin' }
+
+  // ----- During a workout -----
+  if (has(t, /what'?s next|what is next|what('?s| is) after (this|that)|what comes next|what do i do (next|now)|what now|what'?s up next/)) return { type: 'whats_next' }
+  // Logging: "185 for 5", "5 reps at 185", "I did 8 reps", "135 pounds"
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)?\s*(?:for|x|times|by)\s*(\d+)\s*(?:reps?)?/)
   if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]) }
-  m = t.match(/(\d+)\s*reps?\s*(?:at|with|of|@)\s*(\d+(?:\.\d+)?)/)
+  m = t.match(/(\d+)\s*reps?\s*(?:at|with|of|@|using)\s*(\d+(?:\.\d+)?)/)
   if (m) return { type: 'log', weight: Number(m[2]), reps: Number(m[1]) }
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)\b/)
-  if (m && !/what|max|best/.test(t)) return { type: 'log', weight: Number(m[1]), reps: null }
-  m = t.match(/^(?:did |got |i did |i got )?(\d+)\s*reps?$/)
-  if (m) return { type: 'log', weight: null, reps: Number(m[1]) }
-  if (/^(?:(?:i'?m|i am|it'?s|that'?s|we'?re|ok|okay|alright|all)\s+)?(done|finished|set done|done with (that|this|the|it)( set)?|complete|completed|got it|logged|check|check it( off)?|finished it|did it|i did it|i finished)$/.test(t)) return { type: 'done' }
+  if (m && !has(t, /\b(what|max|best|how)\b/)) return { type: 'log', weight: Number(m[1]), reps: null }
+  m = t.match(/(\d+)\s*reps?\b/)
+  if (m && !has(t, /\b(what|how many)\b/)) return { type: 'log', weight: null, reps: Number(m[1]) }
+  if (has(t, /\b(repeat|say (that|it) again|again|what was that|didn'?t (hear|catch)|come again|pardon|one more time)\b/)) return { type: 'repeat' }
+  if (has(t, /\b(go back|previous|back up|last exercise|before this)\b|^back$/)) return { type: 'back' }
+  if (has(t, /\b(next|move on|go on|keep going|continue|skip (this|it|the) ?(exercise|one)?|onto the next|let'?s move)\b/)) return { type: 'next' }
+  if (has(t, /\b(done|finished|completed|complete|got it|did it|finished it|nailed it|that'?s it|knocked it out|all set)\b/)) return { type: 'done' }
+  if (has(t, /\b(let'?s go|let'?s (do|start|begin|get)|start|begin|i'?m ready|ready|get going|get started|open (my |the |today'?s )?workout|i'?m here)\b/)) return { type: 'start' }
 
-  // Questions about numbers
-  if (/\b(where am i|what place|my rank|ranking|leader ?board)\b/.test(t) && !/^(open|go to|show)/.test(t)) {
+  // ----- Numbers -----
+  if (has(t, /\b(where am i|what place|my rank|ranking|ranked|leader ?board|how do i (stack|compare|rank))\b/) && !has(t, /\b(open|go to|show|take me)\b/)) {
     const w = t.match(/\b(?:in|for|on)\s+(?:the\s+)?(.+?)(?:\s+leader ?board)?$/)
-    return { type: 'rank', what: w && !/leader ?board/.test(w[1]) ? w[1] : null }
+    return { type: 'rank', what: w && !/leader ?board|team/.test(w[1]) ? w[1] : null }
   }
-  m = t.match(/\bwhat(?:'?s| is| was| are)\s+my\s+(?:best\s+|current\s+|latest\s+|last\s+)?(.+?)$/)
-  if (m && !/\bworkout|schedule\b/.test(m[1])) return { type: 'stat', what: m[1].replace(/\b(max|pr|record|time|number|score)\b/g, '').trim() || m[1] }
-  m = t.match(/\bhow (?:much|heavy|fast|far|high) (?:is|was|can) (?:my )?(.+?)$/)
+  m = t.match(/\bwhat(?:'?s| is| was| are)\s+(?:my|the)\s+(?:best\s+|current\s+|latest\s+|last\s+|top\s+)?(.+?)$/)
+  if (m && !has(m[1], /\b(workout|schedule|plan)\b/)) return { type: 'stat', what: m[1].replace(/\b(max|pr|record|time|number|score|result)\b/g, '').trim() || m[1] }
+  m = t.match(/\bhow (?:much|heavy|fast|far|high|many) (?:is|was|can|do|did) (?:i |my )?(.+?)$/)
+  if (m) return { type: 'stat', what: m[1] }
+  m = t.match(/\bmy\s+(squat|bench|dead ?lift|trap ?bar|row|vertical|vert|broad jump|40|forty|10|20|pro agility|body ?weight)\b/)
   if (m) return { type: 'stat', what: m[1] }
 
-  // Navigation
-  if (/^(open|go to|show( me)?|take me to|bring up|pull up|switch to)?\s*(my |the )?/.test(t)) {
-    for (const [re, page, label] of PAGES) if (re.test(t) && t.split(' ').length <= 6) return { type: 'nav', page, label }
-  }
-
-  m = t.match(/^(\d+(?:\.\d+)?)$/)
-  if (m) return { type: 'number', value: Number(m[1]) }
+  // ----- Going to a page -----
+  for (const [re, page, label] of PAGES) if (re.test(t) && (t.split(' ').length <= 4 || has(t, /\b(open|go|show|take|bring|pull|see|view|look|check|switch)\b/))) return { type: 'nav', page, label }
 
   return { type: 'unknown', text: original }
 }

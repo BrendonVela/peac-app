@@ -203,7 +203,10 @@ export function onVoiceCommand(fn: VoiceHandler, priority = 0) {
   return () => { const i = handlers.indexOf(h); if (i >= 0) handlers.splice(i, 1) }
 }
 export async function dispatchVoice(raw: string): Promise<boolean> {
-  const cmd = parseCommand(raw)
+  return dispatchCommand(parseCommand(raw), raw)
+}
+/** Run an already-understood command (e.g. one the AI worked out) */
+export async function dispatchCommand(cmd: Command, raw: string): Promise<boolean> {
   for (const h of [...handlers]) {
     try { if (await h.fn(cmd, raw)) return true } catch (e) { console.error('[voice]', e) }
   }

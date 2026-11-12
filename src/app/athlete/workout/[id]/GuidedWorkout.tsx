@@ -141,6 +141,9 @@ export function GuidedWorkout({
       case 'start': case 'repeat':
         if (finished) { await speak('This workout is done. Say "go home" or rate how hard it was.'); return true }
         await speak(stepWords(voiceStepIndex())); return true
+      case 'finish':
+        if (finished) { await speak("You're all set. Great work today."); return true }
+        finishByVoice(); return true
       case 'next':
         if (isLast || finished) { finishByVoice(); return true }
         go(index + 1); return true

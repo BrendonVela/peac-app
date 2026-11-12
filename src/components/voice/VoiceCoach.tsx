@@ -5,10 +5,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Mic, X, Volume2, HelpCircle, Timer as TimerIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  ask, canListen, dispatchVoice, getVoiceSettings, listVoices, listenOnce, onVoiceCommand, onVoiceSettings,
+  ask, canListen, dispatchCommand, dispatchVoice, getVoiceSettings, listVoices, listenOnce, onVoiceCommand, onVoiceSettings,
   onVoiceStatus, onWakeState, setVoiceSettings, setWakeHandler, speak, stopListening, stopSpeaking, thinking, type VoiceStatus,
 } from '@/lib/voice/core'
-import { voiceCoach, voiceMove, voiceNextForm, voiceRank, voiceStat, voiceToday, voiceUnread, voiceWelcome } from '@/app/actions/voice'
+import { voiceCoach, voiceInterpret, voiceMove, voiceNextForm, voiceRank, voiceSchedule, voiceStat, voiceToday, voiceUnread, voiceWelcome } from '@/app/actions/voice'
 import { sendMessage } from '@/app/actions/messages'
 import { formatClock } from '@/lib/rest'
 
@@ -114,6 +114,9 @@ export function VoiceCoach() {
       }
       case 'nav': await say(`Opening ${cmd.label}.`); router.push(cmd.page); return true
       case 'today': { thinking(true); const r = await voiceToday(); thinking(false); await say(r.text); return true }
+      case 'schedule': { thinking(true); const r = await voiceSchedule(cmd.when); thinking(false); await say(r.text); return true }
+      case 'finish': await say("Nice work today! Open the workout and tap Finish to rate how hard it was. Or say \"let's go\" to open it."); return true
+      case 'rest_left': await say("There's no rest timer running right now."); return true
       case 'start': {
         thinking(true); const r = await voiceToday(); thinking(false)
         if (!r.workoutId) { await say(r.text); return true }
@@ -159,11 +162,23 @@ export function VoiceCoach() {
     }
   }, 0), [router, reply]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const misses = useRef(0)
   async function handleSaid(text: string) {
-    if (!text) return
+    if (!text) { await say("I didn't hear anything. Try again a little closer to the phone."); return }
     setReply('')
-    const ok = await dispatchVoice(text)
-    if (!ok) await say(`Sorry, I didn't get "${text}". Say "what can I say" for ideas.`)
+    let ok = await dispatchVoice(text)
+    if (!ok) {
+      // Optional AI help (only if an AI key is set up)
+      thinking(true)
+      const ai = await voiceInterpret(text, pathname ?? '').catch(() => ({ cmd: null }))
+      thinking(false)
+      if (ai.cmd) ok = await dispatchCommand(ai.cmd as never, text)
+    }
+    if (ok) { misses.current = 0; return }
+    misses.current++
+    await say(misses.current >= 2
+      ? `I heard "${text}", but I'm not sure what to do with it. Tap "What can I say" below for examples.`
+      : `I heard "${text}". Can you say that another way?`)
   }
 
   async function tap() {

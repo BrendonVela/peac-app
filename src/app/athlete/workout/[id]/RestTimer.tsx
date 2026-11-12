@@ -76,6 +76,7 @@ export function RestTimer() {
     if (endAt === null) return
     return onVoiceCommand(async cmd => {
       if (cmd.type === 'skip_rest') { close(); await speak("Rest skipped. Let's go."); return true }
+      if (cmd.type === 'rest_left') { const left = Math.max(0, Math.round(((endAt ?? Date.now()) - Date.now()) / 1000)); await speak(left > 0 ? `${left >= 60 ? `${Math.floor(left / 60)} minute${left >= 120 ? 's' : ''} ` : ''}${left % 60 ? `${left % 60} seconds` : ''} left.` : 'Rest is over. Next set.'); return true }
       if (cmd.type === 'add_rest') { adjust(cmd.seconds); await speak(`Added ${cmd.seconds} seconds.`); return true }
       return false
     }, 20)

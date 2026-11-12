@@ -5,7 +5,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { athleteMatch } from '@/lib/acting'
-import { getAthleteSchedule, addDays, formatShortDate, todayISO, type ScheduledWorkout } from '@/lib/schedule'
+import { getAthleteSchedule, addDays, formatShortDate, todayISO, startOfWeek, calendarDate, type ScheduledWorkout } from '@/lib/schedule'
 import { getLiftHistory } from '@/lib/liftHistory'
 import { LIFTS, type LiftKey } from '@/lib/maxes'
 import { loadTestDefs } from '@/lib/tests'
@@ -175,4 +175,82 @@ export async function voiceNextForm() {
   if (!ctx) return { id: null as string | null, title: '' }
   const { due } = await getMyForms(ctx.supabase, ctx.athlete.id)
   return { id: due[0]?.id ?? null, title: due[0]?.title ?? '' }
+}
+
+/** "What do I have tomorrow / Thursday / this week / next week / this weekend?" */
+export async function voiceSchedule(when: string) {
+  const ctx = await me()
+  if (!ctx) return { text: 'Please sign in again.' }
+  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id)
+  const today = s.today
+  let from = today, to = today, label = 'Today'
+  if (when === 'tomorrow') { from = to = addDays(today, 1); label = `Tomorrow, ${dayName(from)},` }
+  else if (when === 'week') { from = today; to = addDays(startOfWeek(today), 6); label = 'For the rest of this week,' }
+  else if (when === 'next week') { from = addDays(startOfWeek(today), 7); to = addDays(from, 6); label = 'Next week' }
+  else if (when === 'weekend') { from = addDays(startOfWeek(today), 5); to = addDays(from, 1); label = 'This weekend' }
+  else if (WEEKDAYS.includes(when)) {
+    const now = new Date(`${today}T00:00:00Z`).getUTCDay()
+    from = to = addDays(today, (WEEKDAYS.indexOf(when) - now + 7) % 7)
+    label = from === today ? 'Today' : `On ${dayName(from)}`
+  }
+  const list = s.items
+    .filter(i => { const d = calendarDate(i); return d >= from && d <= to })
+    .sort((a, b) => calendarDate(a).localeCompare(calendarDate(b)))
+  const status = (i: ScheduledWorkout) => (i.status === 'done' ? ', done' : i.status === 'missed' ? ', missed' : i.status === 'in_progress' ? ', in progress' : '')
+  if (!list.length) return { text: `${label} you don't have any workouts scheduled.`.replace(', you', ' you') }
+  if (from === to) {
+    const parts = list.map(i => `${i.title}, ${i.exerciseCount} exercises${status(i)}`)
+    const open = list.find(i => i.status !== 'done')
+    return {
+      text: `${label} you have ${parts.join('; and ')}.${open && from === today ? ' Say "let\'s go" when you want to start.' : ''}`,
+      workoutId: open?.workoutId ?? null,
+    }
+  }
+  const parts = list.map(i => `${dayName(calendarDate(i))}, ${i.title}${status(i)}`)
+  return { text: `${label} you have ${list.length} workout${list.length === 1 ? '' : 's'}. ${parts.join('. ')}.` }
+}
+
+/**
+ * Optional: when the built-in rules don't understand, ask Claude what the athlete meant.
+ * Only runs if ANTHROPIC_API_KEY is set in Vercel (costs a fraction of a cent per question).
+ * Returns a command the app already knows, or null.
+ */
+export async function voiceInterpret(text: string, page: string) {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key || !text.trim()) return { cmd: null as null | Record<string, unknown> }
+  const system = `You turn what an athlete says to their training app into ONE JSON command. Reply with JSON only.
+Commands:
+{"type":"schedule","when":"today|tomorrow|monday..sunday|week|next week|weekend"} questions about what workouts they have
+{"type":"start"} start/open today's workout
+{"type":"finish"} they finished the whole workout
+{"type":"done"} finished the current set / warm-up
+{"type":"log","weight":number|null,"reps":number|null} report a set
+{"type":"next"} {"type":"back"} {"type":"repeat"} {"type":"whats_next"}
+{"type":"skip_rest"} {"type":"add_rest","seconds":number} {"type":"rest_left"}
+{"type":"timer","seconds":number} {"type":"stop_timer"}
+{"type":"move","day":"today|tomorrow|monday..sunday"} reschedule the workout
+{"type":"message","text":"..."} send a message to their coach
+{"type":"read_messages"}
+{"type":"stat","what":"squat|bench|deadlift|row|40|vertical|..."} their maxes / test results
+{"type":"rank","what":"..."|null} leaderboard position
+{"type":"nav","page":"/athlete/dashboard|/athlete/calendar|/athlete/progress|/athlete/checkin|/athlete/messages|/athlete/leaderboard|/athlete/timer|/athlete/forms|/athlete/settings","label":"short name"}
+{"type":"checkin"} {"type":"form"} {"type":"help"} {"type":"stop"} {"type":"yes"} {"type":"no"}
+{"type":"faster"} {"type":"slower"} {"type":"change_voice"} {"type":"voice_off"}
+{"type":"unknown","text":"..."} if none fit.
+The athlete is on the page: ${page}`
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 120, system, messages: [{ role: 'user', content: text.slice(0, 400) }] }),
+    })
+    if (!res.ok) return { cmd: null }
+    const data = await res.json()
+    const out = String(data?.content?.[0]?.text ?? '')
+    const json = out.match(/\{[\s\S]*\}/)?.[0]
+    const cmd = json ? JSON.parse(json) : null
+    return { cmd: cmd && typeof cmd.type === 'string' && cmd.type !== 'unknown' ? cmd : null }
+  } catch {
+    return { cmd: null }
+  }
 }
