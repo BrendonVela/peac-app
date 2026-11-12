@@ -19,6 +19,7 @@ export type Command =
   | { type: 'finish' }                   // "I finished the workout"
   | { type: 'rest_left' }                // "how much rest is left"
   | { type: 'undo' }                     // "undo that" — un-log the last set
+  | { type: 'video'; on: boolean }       // "watch the demo" / "close the video"
   | { type: 'correct'; weight: number | null; reps: number | null } // "change that to 210 for 5"
   | { type: 'unknown'; text: string }
 
@@ -116,6 +117,10 @@ export function parseCommand(raw: string): Command {
   m = original.match(/(?:send (?:a )?(?:message|text) to|message|text|tell|let) (?:my )?coach(?: know)?(?: that)?[,:]?\s+(.+)$/i)
   if (m) return { type: 'message', text: m[1].trim() }
   if (has(t, /\b(read|check|play|any|new|got|have i got|do i have)\b.*\bmessages?\b|\bmessages? from\b|\bdid (my )?coach (say|text|message|write)/)) return { type: 'read_messages' }
+
+  // ----- Demo video -----
+  if (has(t, /\b(close|hide|stop|exit|turn off|pause|get rid of)\b.*\b(demo|video)s?\b/)) return { type: 'video', on: false }
+  if (has(t, /\b(watch|show|play|see|open|pull up|bring up|start|view|load)\b.*\b(demo|video|tutorial|example)s?\b|^(the )?(demo|video)( video)?$|\bhow (do|should) i do (this|that|it)\b|\bshow me how\b/)) return { type: 'video', on: true }
 
   // ----- The voice itself -----
   if (has(t, /what can (i|you) (say|do|ask)|\bhelp\b|\bcommands\b|how do (i|you) (use|work|talk)/)) return { type: 'help' }

@@ -212,6 +212,23 @@ export function GuidedWorkout({
         await dispatchCommand({ type: 'log', weight: v <= 30 ? null : v, reps: v <= 30 ? v : null }, String(v))
         return true
       }
+      case 'video': {
+        const si = voiceStepIndex()
+        const st = steps[si]
+        if (!st || st.kind === 'warmup') { await speak("The warm-up doesn't have a demo video."); return true }
+        const apis = st.exerciseIds.map((id, k) => ({ id, k, api: getLogger(id) })).filter(x => x.api)
+        if (!apis.length) return false
+        // In a superset: the exercise you're on next (fewest sets done)
+        const target = apis.reduce((a, b) => (b.api!.doneSets() < a.api!.doneSets() ? b : a))
+        const name = st.kind === 'group' ? `${st.labels[target.k]?.tag ?? ''} ${st.labels[target.k]?.name ?? target.api!.title}` : target.api!.title
+        if (!cmd.on) { apis.forEach(x => x.api!.setVideo(false)); await speak('Video closed.'); return true }
+        // Say it first — the coach goes quiet while the video is open
+        await speak(`Here's the demo for ${name}. It starts muted. Tap the video for sound, and close it when you're done.`)
+        const r = target.api!.setVideo(true)
+        if (r === 'none') await speak(`There's no demo video for ${name} yet.`)
+        else if (r === 'link') await speak('This demo opens on another site. Tap Watch demo on the screen.')
+        return true
+      }
       case 'finish':
         if (finished) { await speak("You're all set. Great work today."); return true }
         finishByVoice(); return true

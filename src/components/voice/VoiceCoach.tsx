@@ -18,7 +18,7 @@ export const VOICE_HELP: { title: string; lines: string[] }[] = [
   { title: 'Hands-free', lines: ['Say "Hey PEAC" — then what you want ("Hey PEAC, 185 for 5")', 'Or tap the blue mic and talk'] },
   { title: 'Getting around', lines: ['"Open my calendar" / "Go to progress" / "Leaderboard"', '"What\'s my workout today?"', '"Let\'s go" — opens today\'s workout'] },
   { title: 'Check-in', lines: ['Answer each question with a number: "seven"', '"Yes" to submit'] },
-  { title: 'During a workout', lines: ['"185 for 5" or "5 reps at 185" — logs the next set', '"Done" — logs the set as written', '"Next" / "Back" / "Repeat" / "What\'s next?"', '"Skip rest" / "Add 30 seconds"'] },
+  { title: 'During a workout', lines: ['"185 for 5" or "5 reps at 185" — logs the next set', '"Done" — logs the set as written', '"Next" / "Back" / "Repeat" / "What\'s next?"', '"Watch the demo" / "Close the video"', '"That\'s wrong" / "Set 2 was 205 for 5" / "Undo that"', '"Skip rest" / "Add 30 seconds"'] },
   { title: 'Your numbers', lines: ['"What\'s my squat max?" / "What\'s my 40 time?"', '"Where am I on the leaderboard?"'] },
   { title: 'Everything else', lines: ['"Move today\'s workout to Thursday"', '"Message coach I\'m running late" / "Read my messages"', '"Start a 2 minute timer" / "Stop the timer"', '"Fill out my form"', '"Talk faster" / "Change voice" / "Turn off the voice"'] },
 ]
@@ -124,7 +124,7 @@ export function VoiceCoach() {
         router.push(`/athlete/workout/${r.workoutId}?voice=1`)
         return true
       }
-      case 'next': case 'back': case 'done': case 'log': case 'whats_next': case 'skip_rest': case 'add_rest': case 'undo': case 'correct': case 'set_entry':
+      case 'next': case 'back': case 'done': case 'log': case 'whats_next': case 'skip_rest': case 'add_rest': case 'undo': case 'correct': case 'set_entry': case 'video':
         await say('Open your workout first. Say "let\'s go".'); return true
       case 'repeat': if (reply) await speak(reply); return true
       case 'timer':

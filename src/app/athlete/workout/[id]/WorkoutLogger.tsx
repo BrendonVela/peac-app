@@ -116,6 +116,7 @@ export function WorkoutLogger({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
+  const [autoplay, setAutoplay] = useState(false) // opened by voice -> start playing (muted, phones require a tap for sound)
   // While a demo video is open, the voice coach stops listening so the video can play with sound
   useEffect(() => {
     setVoicePaused(`video-${workoutExerciseId}`, showVideo)
@@ -226,6 +227,15 @@ export function WorkoutLogger({
       }
     },
   }
+  const videoRef = useRef<(on: boolean) => 'shown' | 'link' | 'none'>()
+  videoRef.current = on => {
+    if (!shownVideo) return 'none'
+    if (!embedUrl) return 'link'
+    setAutoplay(on)
+    setShowVideo(on)
+    if (on) setTimeout(() => document.getElementById(`wl-${workoutExerciseId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+    return 'shown'
+  }
   const editRef = useRef<{ fix: (set: number, w: number | null, r: number | null) => { weight: number | null; reps: number | null } | null; undo: (set: number) => boolean }>()
   editRef.current = {
     fix: (set, w, r) => {
@@ -262,6 +272,7 @@ export function WorkoutLogger({
     },
     fixSet: (set, w, r) => editRef.current!.fix(set, w, r),
     undoSet: set => editRef.current!.undo(set),
+    setVideo: on => videoRef.current!(on),
   }), [workoutExerciseId, exerciseTitle, setCount, targets])
 
   const lastSummary = lastTime ? lastTime.sets.map(formatLast).filter(Boolean).join(', ') : ''
@@ -423,7 +434,7 @@ export function WorkoutLogger({
             </span>
           ) : embedUrl ? (
             <button
-              onClick={() => setShowVideo(!showVideo)}
+              onClick={() => { setAutoplay(false); setShowVideo(!showVideo) }}
               className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 whitespace-nowrap"
             >
               {showVideo ? <X className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -445,9 +456,9 @@ export function WorkoutLogger({
 
       {/* Video: full width, below the buttons */}
       {showVideo && embedUrl && (
-        <div className="aspect-video w-full overflow-hidden rounded-lg border border-zinc-800">
+        <div id={`wl-${workoutExerciseId}`} className="aspect-video w-full overflow-hidden rounded-lg border border-zinc-800">
           <iframe
-            src={embedUrl}
+            src={autoplay ? `${embedUrl}&autoplay=1&mute=1` : embedUrl}
             title="Exercise demo"
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

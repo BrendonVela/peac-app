@@ -226,6 +226,8 @@ export interface LoggerApi {
   fixSet: (set: number, weight: number | null, reps: number | null) => { weight: number | null; reps: number | null } | null
   /** Un-log a set (1-based) */
   undoSet: (set: number) => boolean
+  /** Open/close the demo video. 'shown' | 'link' (only opens in a new tab) | 'none' (no video) */
+  setVideo: (on: boolean) => 'shown' | 'link' | 'none'
 }
 const loggers = new Map<string, LoggerApi>()
 export function registerLogger(id: string, api: LoggerApi) { loggers.set(id, api); return () => { if (loggers.get(id) === api) loggers.delete(id) } }
