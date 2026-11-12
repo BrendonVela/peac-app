@@ -5,7 +5,8 @@ export type Command =
   | { type: 'nav'; page: string; label: string }
   | { type: 'start' } | { type: 'today' }
   | { type: 'next' } | { type: 'back' } | { type: 'repeat' } | { type: 'whats_next' }
-  | { type: 'done' } | { type: 'log'; weight: number | null; reps: number | null }
+  | { type: 'done' } | { type: 'log'; weight: number | null; reps: number | null; back?: boolean }
+  | { type: 'set_entry'; set: number; weight: number | null; reps: number | null } // "set 2 was 205 for 5"
   | { type: 'skip_rest' } | { type: 'add_rest'; seconds: number }
   | { type: 'timer'; seconds: number } | { type: 'stop_timer' }
   | { type: 'message'; text: string } | { type: 'read_messages' }
@@ -160,27 +161,31 @@ export function parseCommand(raw: string): Command {
 
   // ----- During a workout -----
   if (has(t, /what'?s next|what is next|what('?s| is) after (this|that)|what comes next|what do i do (next|now)|what now|what'?s up next/)) return { type: 'whats_next' }
-  // Fixing the last set: "undo that", "change that to 210 for 5", "no, I meant 5 reps"
-  if (has(t, /\b(undo|take (that|it) back|delete (that|the last|it)|remove (that|the last)|scratch that|un ?check|didn'?t do (that|it))\b/)) return { type: 'undo' }
-  if (has(t, /\b(fix|correct|change|update|edit|i meant|meant|it was|that was|that'?s wrong|wrong|should be|should have been|make (it|that)|not \d+)\b/)) {
-    const pair = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?)?\s*(?:for|x|times|by)\s*(\d+)/)
-    if (pair) return { type: 'correct', weight: Number(pair[1]), reps: Number(pair[2]) }
-    const r = t.match(/(\d+)\s*reps?\b/)
-    const w = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)\b/)
-    if (r || w) return { type: 'correct', weight: w ? Number(w[1]) : null, reps: r ? Number(r[1]) : null }
-    const nums = Array.from(t.matchAll(/\d+(?:\.\d+)?/g)).map(x => Number(x[0]))
-    const n = nums[nums.length - 1]
-    if (n != null) return n <= 30 ? { type: 'correct', weight: null, reps: n } : { type: 'correct', weight: n, reps: null }
-    return { type: 'correct', weight: null, reps: null }
+  // ----- Fixing sets -----
+  const nums = readSetNumbers(t)
+  // A specific set: "set 2 was 205 for 5", "change the second set to 6 reps", "fix set one, 210"
+  const setNo = t.match(/\bset (?:number )?(\d+)\b|\b(first|second|third|fourth|fifth|sixth|last) set\b/)
+  if (setNo && (nums.weight != null || nums.reps != null)) {
+    const n = setNo[1] ? Number(setNo[1]) : ({ first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, last: -1 } as Record<string, number>)[setNo[2]]
+    return { type: 'set_entry', set: n, weight: nums.weight, reps: nums.reps }
   }
+  if (has(t, /\b(undo|take (that|it) back|delete (that|the last|it)|remove (that|the last)|scratch that|un ?check|didn'?t do (that|it))\b/)) return { type: 'undo' }
+  const fixWords = /\b(fix|correct|change|update|edit|redo|i meant|meant|that'?s wrong|it'?s wrong|wrong|mistake|instead|should (be|have been|say|read)|supposed to be|make (it|that)|not \d+|put)\b/
+  const startsNo = /^(no|nope|nah|actually|oops|whoops|wait|sorry|my bad|hold on|correction)\b/
+  if (has(t, fixWords) || ((has(t, startsNo) || has(base, startsNo)) && (nums.weight != null || nums.reps != null))) {
+    return { type: 'correct', weight: nums.weight, reps: nums.reps }
+  }
+  // "that was 185 for 5" right after a set -> fix it if I just logged it
+  const back = has(t, /\b(that|it|that one|this one|the last one) (was|is)\b/)
+  if (back && (nums.weight != null || nums.reps != null)) return { type: 'log', weight: nums.weight, reps: nums.reps, back }
   // Phones sometimes hear "210 for 5" as "210 4 5" or "210 5"
   m = t.match(/^(?:i did |did |got |i got )?(\d{2,4}(?:\.\d+)?)\s+(?:4\s+)?(\d{1,2})(?:\s*reps?)?$/)
   if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]) }
   // Logging: "185 for 5", "5 reps at 185", "I did 8 reps", "135 pounds"
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)?\s*(?:for|x|times|by)\s*(\d+)\s*(?:reps?)?/)
-  if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]) }
+  if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]), back }
   m = t.match(/(\d+)\s*reps?\s*(?:at|with|of|@|using)\s*(\d+(?:\.\d+)?)/)
-  if (m) return { type: 'log', weight: Number(m[2]), reps: Number(m[1]) }
+  if (m) return { type: 'log', weight: Number(m[2]), reps: Number(m[1]), back }
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)\b/)
   if (m && !has(t, /\b(what|max|best|how)\b/)) return { type: 'log', weight: Number(m[1]), reps: null }
   m = t.match(/(\d+)\s*reps?\b/)
@@ -249,4 +254,22 @@ export function sanitySet(weight: number | null, reps: number | null, targetWeig
   const best = valid.sort((a, b) => score(a) - score(b))[0]
   if (targetWeight && Math.abs(best.w - targetWeight) / targetWeight > 0.6) return null
   return { weight: best.w, reps: best.r, fixed: true }
+}
+
+/** Weight and reps anywhere in a sentence: "210 for 5", "5 reps at 210", "210 pounds", "6 reps", "210 4 5", or one number */
+export function readSetNumbers(t: string): { weight: number | null; reps: number | null } {
+  let m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)?\s*(?:for|x|times|by)\s*(\d+)/)
+  if (m) return { weight: Number(m[1]), reps: Number(m[2]) }
+  m = t.match(/(\d+)\s*reps?\s*(?:at|with|of|@|using)\s*(\d+(?:\.\d+)?)/)
+  if (m) return { weight: Number(m[2]), reps: Number(m[1]) }
+  m = t.match(/(\d{2,4}(?:\.\d+)?)\s+4\s+(\d{1,2})\b/)
+  if (m) return { weight: Number(m[1]), reps: Number(m[2]) }
+  const r = t.match(/(\d+)\s*reps?\b/)
+  const w = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)\b/)
+  if (r || w) return { weight: w ? Number(w[1]) : null, reps: r ? Number(r[1]) : null }
+  // Bare numbers (ignore a "set 2" number)
+  const nums = Array.from(t.replace(/\bset (?:number )?\d+\b/g, ' ').matchAll(/\d+(?:\.\d+)?/g)).map(x => Number(x[0]))
+  if (nums.length >= 2) return { weight: nums[nums.length - 2], reps: nums[nums.length - 1] }
+  if (nums.length === 1) return nums[0] <= 30 ? { weight: null, reps: nums[0] } : { weight: nums[0], reps: null }
+  return { weight: null, reps: null }
 }

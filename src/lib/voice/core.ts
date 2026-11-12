@@ -89,8 +89,8 @@ export function stopSpeaking() {
 export function speak(text: string, opts: { force?: boolean } = {}): Promise<void> {
   const s = getVoiceSettings()
   if ((!s.enabled && !opts.force) || !canSpeak() || !text.trim()) return Promise.resolve()
-  // The shared weight-room tablet stays quiet
-  if (!opts.force && window.location.pathname.startsWith('/kiosk')) return Promise.resolve()
+  // The shared weight-room tablet stays quiet; so does a playing demo video
+  if (!opts.force && (window.location.pathname.startsWith('/kiosk') || pausers.size > 0)) return Promise.resolve()
   stopListening()
   stopWake()
   window.speechSynthesis.cancel()
@@ -268,7 +268,7 @@ function startWake() {
   wakeTimer = null
   const s = getVoiceSettings()
   const R = Recognition()
-  if (!wakeHandler || wakeBlocked || !R || !s.enabled || !s.wakeWord || wakeRec) return
+  if (!wakeHandler || wakeBlocked || !R || !s.enabled || !s.wakeWord || wakeRec || pausers.size > 0) return
   if (status.state !== 'idle' || active || document.hidden) return
   if (window.location.pathname.startsWith('/kiosk')) return
   const rec = new R()
@@ -306,3 +306,12 @@ function startWake() {
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopWake(); else scheduleWake() })
 }
+
+// ---------------- Pause while a video plays ----------------
+// Phones can't play a video's sound while the mic is listening, so the coach steps aside.
+const pausers = new Set<string>()
+export function setVoicePaused(reason: string, paused: boolean) {
+  if (paused) { pausers.add(reason); stopSpeaking(); stopListening(); stopWake() }
+  else { pausers.delete(reason); scheduleWake(800) }
+}
+export const voicePaused = () => pausers.size > 0

@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { dispatchCommand, getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
-import { sanitySet } from '@/lib/voice/parse'
+import { ask, dispatchCommand, getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
+import { parseCommand, readSetNumbers, normalizeNumbers, sanitySet } from '@/lib/voice/parse'
 import { formatClock } from '@/lib/rest'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ListChecks, Rows3, Footprints, Repeat, CheckCircle2, Flame, PartyPopper } from 'lucide-react'
@@ -105,7 +105,37 @@ export function GuidedWorkout({
   // ---------- Voice coach ----------
   const firstSay = useRef(true)
   /** The last set logged by voice, so "fix that" / "undo that" know what to change */
-  const lastLog = useRef<{ id: string; set: number; name: string } | null>(null)
+  const lastLog = useRef<{ id: string; set: number; name: string; at: number } | null>(null)
+  /** Waiting for the right numbers after "that's wrong" */
+  const fixPending = useRef<number>(0)
+
+  /** Change a logged set and say what it is now */
+  async function applyFix(L: { id: string; set: number; name: string }, weight: number | null, reps: number | null) {
+    const api = getLogger(L.id)
+    if (!api) return false
+    const sane = sanitySet(weight, reps, api.nextTargetWeight())
+    if (!sane) { await speak(`I heard ${weight ?? ''} ${reps ?? ''}. That doesn't sound right. Say it like "210 for 5".`); return true }
+    const fixed = api.fixSet(L.set, sane.weight, sane.reps)
+    fixPending.current = 0
+    lastLog.current = { ...L, at: Date.now() }
+    await speak(fixed ? `Got it. ${L.name} set ${L.set} is now ${fixed.weight ?? ''}${fixed.weight != null && fixed.reps != null ? ' for ' : ''}${fixed.reps ?? ''}${fixed.reps != null ? ' reps' : ''}.` : "I couldn't change that one. Tap the numbers to fix it.")
+    return true
+  }
+
+  /** "That's wrong" with no numbers: ask what it should be and listen for the answer */
+  async function askForFix(L: { id: string; set: number; name: string }) {
+    fixPending.current = Date.now()
+    const ans = await ask(`Okay. What should ${L.name} set ${L.set} be? Like "210 for 5".`)
+    if (!ans) return true // they can still answer by tapping the mic — fixPending catches it
+    const n = readSetNumbers(normalizeNumbers(ans))
+    if (n.weight == null && n.reps == null) {
+      const c = parseCommand(ans)
+      if (c.type === 'undo') { await dispatchCommand(c, ans); return true }
+      await speak("I didn't catch the numbers. Tap the boxes to fix it, or say \"change that to 210 for 5\".")
+      return true
+    }
+    return applyFix(L, n.weight, n.reps)
+  }
   const stepWords = (i: number) => {
     const s = steps[i]
     if (!s) return ''
@@ -145,6 +175,7 @@ export function GuidedWorkout({
         if (finished) { await speak('This workout is done. Say "go home" or rate how hard it was.'); return true }
         await speak(stepWords(voiceStepIndex())); return true
       case 'undo': {
+        fixPending.current = 0
         const L = lastLog.current
         const api = L ? getLogger(L.id) : null
         if (!L || !api) { await speak("There's nothing I logged to undo. You can tap the check mark to un-check a set."); return true }
@@ -155,17 +186,29 @@ export function GuidedWorkout({
       }
       case 'correct': {
         const L = lastLog.current
-        const api = L ? getLogger(L.id) : null
-        if (!L || !api) { await speak("Which set? Tap the numbers to change them, or log the set first."); return true }
-        if (cmd.weight == null && cmd.reps == null) { await speak(`What should ${L.name} set ${L.set} be? Say something like "change it to 210 for 5".`); return true }
-        const fixed = api.fixSet(L.set, cmd.weight, cmd.reps)
-        await speak(fixed ? `Fixed. ${L.name} set ${L.set} is now ${fixed.weight ?? ''}${fixed.weight != null && fixed.reps != null ? ' for ' : ''}${fixed.reps ?? ''}.` : "I couldn't change that one. Tap the numbers to fix it.")
-        return true
+        if (!L || !getLogger(L.id)) { await speak("I haven't logged a set yet. Tap the numbers to change them, or say something like \"set 1 was 210 for 5\"."); return true }
+        if (cmd.weight == null && cmd.reps == null) return askForFix(L)
+        return applyFix(L, cmd.weight, cmd.reps)
+      }
+      case 'set_entry': {
+        // "set 2 was 205 for 5": that set of the exercise you're on (or the last one you logged in a superset)
+        const si = voiceStepIndex()
+        const st = steps[si]
+        const id = lastLog.current && st?.exerciseIds.includes(lastLog.current.id) ? lastLog.current.id : st?.exerciseIds[0]
+        const api = id ? getLogger(id) : null
+        if (!st || !id || !api) return false
+        const setNum = cmd.set === -1 ? Math.max(1, api.doneSets()) : cmd.set
+        if (setNum < 1 || setNum > api.total) { await speak(`There are only ${api.total} sets here.`); return true }
+        const name = st.kind === 'group' ? (st.labels.find(l => l.id === id)?.tag ?? api.title) : api.title
+        return applyFix({ id, set: setNum, name }, cmd.weight, cmd.reps)
       }
       case 'number': {
         // A lone number during a set: small = reps, bigger = weight, run-together = split it
         if (finished) return false
         const v = cmd.value
+        if (fixPending.current && Date.now() - fixPending.current < 45000 && lastLog.current) {
+          return applyFix(lastLog.current, v <= 30 ? null : v, v <= 30 ? v : null)
+        }
         await dispatchCommand({ type: 'log', weight: v <= 30 ? null : v, reps: v <= 30 ? v : null }, String(v))
         return true
       }
@@ -191,13 +234,18 @@ export function GuidedWorkout({
         const target = apis.reduce((a, b) => (b.api!.doneSets() < a.api!.doneSets() ? b : a))
         let w = cmd.type === 'log' ? cmd.weight : null
         let r = cmd.type === 'log' ? cmd.reps : null
+        // Answering "what should it be?", or "that was 185 for 5" right after logging -> fix, don't add a new set
+        const L0 = lastLog.current
+        if (cmd.type === 'log' && L0 && ((fixPending.current && Date.now() - fixPending.current < 45000) || (cmd.back && Date.now() - L0.at < 45000))) {
+          return applyFix(L0, w, r)
+        }
         // Catch numbers that don't make sense ("2105" = 210 for 5)
         const sane = sanitySet(w, r, target.api!.nextTargetWeight())
         if (!sane) { await speak(`I heard ${[w != null ? `${w} pounds` : '', r != null ? `${r} reps` : ''].filter(Boolean).join(' and ')}. That doesn't sound right, so I didn't log it. Say it like "210 for 5".`); return true }
         let prefix = ''
         if (sane.fixed) { w = sane.weight; r = sane.reps; prefix = `I heard ${cmd.type === 'log' ? (cmd.reps ?? cmd.weight) : ''}, so I logged ${w} for ${r}. Say "fix that" if it's wrong. ` }
         const res = target.api!.logNext(w, r)
-        if (res) lastLog.current = { id: target.id, set: res.set, name: st.kind === 'group' ? (st.labels[target.k]?.tag ?? target.api!.title) : target.api!.title }
+        if (res) lastLog.current = { id: target.id, set: res.set, name: st.kind === 'group' ? (st.labels[target.k]?.tag ?? target.api!.title) : target.api!.title, at: Date.now() }
         if (!res) { await speak(`All sets are done here. Say next ${next ? `for ${next.title}` : 'to finish'}.`); return true }
         const what = `${res.weight ? `${res.weight} pounds` : ''}${res.weight && res.reps ? ' for ' : ''}${res.reps ? `${res.reps}` : ''}`
         let say = `${prefix}${st.kind === 'group' ? `${st.labels[target.k]?.tag ?? ''}, ` : ''}set ${res.set} of ${res.total}${what ? `, ${what}` : ''}. `

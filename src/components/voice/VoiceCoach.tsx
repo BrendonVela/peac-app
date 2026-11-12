@@ -124,7 +124,7 @@ export function VoiceCoach() {
         router.push(`/athlete/workout/${r.workoutId}?voice=1`)
         return true
       }
-      case 'next': case 'back': case 'done': case 'log': case 'whats_next': case 'skip_rest': case 'add_rest': case 'undo': case 'correct':
+      case 'next': case 'back': case 'done': case 'log': case 'whats_next': case 'skip_rest': case 'add_rest': case 'undo': case 'correct': case 'set_entry':
         await say('Open your workout first. Say "let\'s go".'); return true
       case 'repeat': if (reply) await speak(reply); return true
       case 'timer':

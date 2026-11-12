@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { registerLogger } from '@/lib/voice/core'
+import { registerLogger, setVoicePaused } from '@/lib/voice/core'
 import { CheckCircle2, Circle, Check, Play, X, VideoOff, ExternalLink, Timer, Shuffle } from 'lucide-react'
 import { formatClock, REST_START_EVENT, SET_DONE_EVENT, EXERCISE_DONE_EVENT, type RestEventDetail } from '@/lib/rest'
 import { saveOrQueue } from '@/lib/offlineQueue'
@@ -14,7 +14,7 @@ function getYouTubeEmbedUrl(url: string): string | null {
   const match = url.match(
     /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
   )
-  return match ? `https://www.youtube.com/embed/${match[1]}` : null
+  return match ? `https://www.youtube.com/embed/${match[1]}?playsinline=1&rel=0&modestbranding=1` : null
 }
 
 export interface SetTarget {
@@ -116,6 +116,11 @@ export function WorkoutLogger({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showVideo, setShowVideo] = useState(false)
+  // While a demo video is open, the voice coach stops listening so the video can play with sound
+  useEffect(() => {
+    setVoicePaused(`video-${workoutExerciseId}`, showVideo)
+    return () => setVoicePaused(`video-${workoutExerciseId}`, false)
+  }, [showVideo, workoutExerciseId])
   const [offline, setOffline] = useState(false)
 
   const [swapId, setSwapId] = useState<string | null>(initialSwapId)
@@ -445,7 +450,8 @@ export function WorkoutLogger({
             src={embedUrl}
             title="Exercise demo"
             className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
             allowFullScreen
           />
         </div>
