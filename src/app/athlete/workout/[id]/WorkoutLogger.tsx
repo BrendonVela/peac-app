@@ -221,12 +221,43 @@ export function WorkoutLogger({
       }
     },
   }
+  const editRef = useRef<{ fix: (set: number, w: number | null, r: number | null) => { weight: number | null; reps: number | null } | null; undo: (set: number) => boolean }>()
+  editRef.current = {
+    fix: (set, w, r) => {
+      const cur = rowsRef.current
+      const i = set - 1
+      if (!cur[i]) return null
+      const row: Row = { ...cur[i], weight: w != null ? String(w) : cur[i].weight, reps: r != null ? String(r) : cur[i].reps, done: true }
+      const next = cur.map((x, k) => (k === i ? row : x))
+      rowsRef.current = next
+      setRows(next)
+      persist(next, next.every(x => x.done))
+      return { weight: row.weight !== '' ? Number(row.weight) : null, reps: row.reps !== '' ? Number(row.reps) : null }
+    },
+    undo: set => {
+      const cur = rowsRef.current
+      const i = set - 1
+      if (!cur[i]) return false
+      const next = cur.map((x, k) => (k === i ? { weight: '', reps: '', done: false } : x))
+      rowsRef.current = next
+      setRows(next)
+      persist(next, false)
+      return true
+    },
+  }
   useEffect(() => registerLogger(workoutExerciseId, {
     title: exerciseTitle,
     total: setCount,
     doneSets: () => rowsRef.current.filter(x => x.done).length,
     logNext: (w, r) => apiRef.current!.log(w, r),
-  }), [workoutExerciseId, exerciseTitle, setCount])
+    nextTargetWeight: () => {
+      const i = rowsRef.current.findIndex(x => !x.done)
+      const v = firstNumber(targets[i < 0 ? targets.length - 1 : i]?.weight ?? null)
+      return v ? Number(v) : null
+    },
+    fixSet: (set, w, r) => editRef.current!.fix(set, w, r),
+    undoSet: set => editRef.current!.undo(set),
+  }), [workoutExerciseId, exerciseTitle, setCount, targets])
 
   const lastSummary = lastTime ? lastTime.sets.map(formatLast).filter(Boolean).join(', ') : ''
 

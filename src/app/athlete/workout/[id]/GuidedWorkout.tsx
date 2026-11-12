@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
+import { dispatchCommand, getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
+import { sanitySet } from '@/lib/voice/parse'
 import { formatClock } from '@/lib/rest'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, ListChecks, Rows3, Footprints, Repeat, CheckCircle2, Flame, PartyPopper } from 'lucide-react'
@@ -103,6 +104,8 @@ export function GuidedWorkout({
 
   // ---------- Voice coach ----------
   const firstSay = useRef(true)
+  /** The last set logged by voice, so "fix that" / "undo that" know what to change */
+  const lastLog = useRef<{ id: string; set: number; name: string } | null>(null)
   const stepWords = (i: number) => {
     const s = steps[i]
     if (!s) return ''
@@ -141,6 +144,31 @@ export function GuidedWorkout({
       case 'start': case 'repeat':
         if (finished) { await speak('This workout is done. Say "go home" or rate how hard it was.'); return true }
         await speak(stepWords(voiceStepIndex())); return true
+      case 'undo': {
+        const L = lastLog.current
+        const api = L ? getLogger(L.id) : null
+        if (!L || !api) { await speak("There's nothing I logged to undo. You can tap the check mark to un-check a set."); return true }
+        api.undoSet(L.set)
+        lastLog.current = null
+        await speak(`Okay, I took off ${L.name} set ${L.set}.`)
+        return true
+      }
+      case 'correct': {
+        const L = lastLog.current
+        const api = L ? getLogger(L.id) : null
+        if (!L || !api) { await speak("Which set? Tap the numbers to change them, or log the set first."); return true }
+        if (cmd.weight == null && cmd.reps == null) { await speak(`What should ${L.name} set ${L.set} be? Say something like "change it to 210 for 5".`); return true }
+        const fixed = api.fixSet(L.set, cmd.weight, cmd.reps)
+        await speak(fixed ? `Fixed. ${L.name} set ${L.set} is now ${fixed.weight ?? ''}${fixed.weight != null && fixed.reps != null ? ' for ' : ''}${fixed.reps ?? ''}.` : "I couldn't change that one. Tap the numbers to fix it.")
+        return true
+      }
+      case 'number': {
+        // A lone number during a set: small = reps, bigger = weight, run-together = split it
+        if (finished) return false
+        const v = cmd.value
+        await dispatchCommand({ type: 'log', weight: v <= 30 ? null : v, reps: v <= 30 ? v : null }, String(v))
+        return true
+      }
       case 'finish':
         if (finished) { await speak("You're all set. Great work today."); return true }
         finishByVoice(); return true
@@ -161,12 +189,18 @@ export function GuidedWorkout({
         const apis = st.exerciseIds.map((id, k) => ({ id, k, api: getLogger(id) })).filter(x => x.api)
         if (!apis.length) return false
         const target = apis.reduce((a, b) => (b.api!.doneSets() < a.api!.doneSets() ? b : a))
-        const w = cmd.type === 'log' ? cmd.weight : null
-        const r = cmd.type === 'log' ? cmd.reps : null
+        let w = cmd.type === 'log' ? cmd.weight : null
+        let r = cmd.type === 'log' ? cmd.reps : null
+        // Catch numbers that don't make sense ("2105" = 210 for 5)
+        const sane = sanitySet(w, r, target.api!.nextTargetWeight())
+        if (!sane) { await speak(`I heard ${[w != null ? `${w} pounds` : '', r != null ? `${r} reps` : ''].filter(Boolean).join(' and ')}. That doesn't sound right, so I didn't log it. Say it like "210 for 5".`); return true }
+        let prefix = ''
+        if (sane.fixed) { w = sane.weight; r = sane.reps; prefix = `I heard ${cmd.type === 'log' ? (cmd.reps ?? cmd.weight) : ''}, so I logged ${w} for ${r}. Say "fix that" if it's wrong. ` }
         const res = target.api!.logNext(w, r)
+        if (res) lastLog.current = { id: target.id, set: res.set, name: st.kind === 'group' ? (st.labels[target.k]?.tag ?? target.api!.title) : target.api!.title }
         if (!res) { await speak(`All sets are done here. Say next ${next ? `for ${next.title}` : 'to finish'}.`); return true }
         const what = `${res.weight ? `${res.weight} pounds` : ''}${res.weight && res.reps ? ' for ' : ''}${res.reps ? `${res.reps}` : ''}`
-        let say = `${st.kind === 'group' ? `${st.labels[target.k]?.tag ?? ''}, ` : ''}set ${res.set} of ${res.total}${what ? `, ${what}` : ''}. `
+        let say = `${prefix}${st.kind === 'group' ? `${st.labels[target.k]?.tag ?? ''}, ` : ''}set ${res.set} of ${res.total}${what ? `, ${what}` : ''}. `
         if (st.kind === 'group') {
           const counts = apis.map(x => x.api!.doneSets())
           const allDone = apis.every(x => x.api!.doneSets() >= x.api!.total)

@@ -220,6 +220,12 @@ export interface LoggerApi {
   doneSets: () => number
   /** Log the next open set. Returns what was logged, or null if every set is already done. */
   logNext: (weight: number | null, reps: number | null) => { set: number; total: number; weight: number | null; reps: number | null; allDone: boolean; restLabel: string | null; rested: boolean } | null
+  /** Target weight of the next open set (to sanity-check what was heard) */
+  nextTargetWeight: () => number | null
+  /** Change a set (1-based) that's already logged */
+  fixSet: (set: number, weight: number | null, reps: number | null) => { weight: number | null; reps: number | null } | null
+  /** Un-log a set (1-based) */
+  undoSet: (set: number) => boolean
 }
 const loggers = new Map<string, LoggerApi>()
 export function registerLogger(id: string, api: LoggerApi) { loggers.set(id, api); return () => { if (loggers.get(id) === api) loggers.delete(id) } }

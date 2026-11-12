@@ -17,6 +17,8 @@ export type Command =
   | { type: 'schedule'; when: string }   // today | tomorrow | monday… | week | next week | weekend
   | { type: 'finish' }                   // "I finished the workout"
   | { type: 'rest_left' }                // "how much rest is left"
+  | { type: 'undo' }                     // "undo that" — un-log the last set
+  | { type: 'correct'; weight: number | null; reps: number | null } // "change that to 210 for 5"
   | { type: 'unknown'; text: string }
 
 const ONES: Record<string, number> = {
@@ -158,6 +160,22 @@ export function parseCommand(raw: string): Command {
 
   // ----- During a workout -----
   if (has(t, /what'?s next|what is next|what('?s| is) after (this|that)|what comes next|what do i do (next|now)|what now|what'?s up next/)) return { type: 'whats_next' }
+  // Fixing the last set: "undo that", "change that to 210 for 5", "no, I meant 5 reps"
+  if (has(t, /\b(undo|take (that|it) back|delete (that|the last|it)|remove (that|the last)|scratch that|un ?check|didn'?t do (that|it))\b/)) return { type: 'undo' }
+  if (has(t, /\b(fix|correct|change|update|edit|i meant|meant|it was|that was|that'?s wrong|wrong|should be|should have been|make (it|that)|not \d+)\b/)) {
+    const pair = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?)?\s*(?:for|x|times|by)\s*(\d+)/)
+    if (pair) return { type: 'correct', weight: Number(pair[1]), reps: Number(pair[2]) }
+    const r = t.match(/(\d+)\s*reps?\b/)
+    const w = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)\b/)
+    if (r || w) return { type: 'correct', weight: w ? Number(w[1]) : null, reps: r ? Number(r[1]) : null }
+    const nums = Array.from(t.matchAll(/\d+(?:\.\d+)?/g)).map(x => Number(x[0]))
+    const n = nums[nums.length - 1]
+    if (n != null) return n <= 30 ? { type: 'correct', weight: null, reps: n } : { type: 'correct', weight: n, reps: null }
+    return { type: 'correct', weight: null, reps: null }
+  }
+  // Phones sometimes hear "210 for 5" as "210 4 5" or "210 5"
+  m = t.match(/^(?:i did |did |got |i got )?(\d{2,4}(?:\.\d+)?)\s+(?:4\s+)?(\d{1,2})(?:\s*reps?)?$/)
+  if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]) }
   // Logging: "185 for 5", "5 reps at 185", "I did 8 reps", "135 pounds"
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:pounds|lbs?|lb)?\s*(?:for|x|times|by)\s*(\d+)\s*(?:reps?)?/)
   if (m) return { type: 'log', weight: Number(m[1]), reps: Number(m[2]) }
@@ -205,4 +223,30 @@ export function afterWakeWord(text: string): string | null {
   const m = text.match(WAKE)
   if (!m || m.index === undefined) return null
   return text.slice(m.index + m[0].length).trim()
+}
+
+/**
+ * Make sense of numbers the phone may have run together.
+ * "2105" with a 210 lb target -> 210 for 5. "21045" -> 210 for 5 ("for" heard as 4).
+ * Returns fixed numbers (with a note when changed), or null if they still don't make sense.
+ */
+export function sanitySet(weight: number | null, reps: number | null, targetWeight: number | null): { weight: number | null; reps: number | null; fixed: boolean } | null {
+  const okReps = (r: number | null) => r == null || (r >= 0 && r <= 50)
+  const okWeight = (w: number | null) => w == null || (w >= 0 && w <= 1500)
+  if (okReps(reps) && okWeight(weight)) return { weight, reps, fixed: false }
+  // One run-together number (in reps or weight), the other missing
+  const run = !okReps(reps) && weight == null ? reps : !okWeight(weight) && reps == null ? weight : null
+  if (run == null || !Number.isInteger(run)) return null
+  const d = String(run)
+  const options: { w: number; r: number; rs: string }[] = []
+  for (let i = 1; i < d.length; i++) {
+    options.push({ w: Number(d.slice(0, i)), r: Number(d.slice(i)), rs: d.slice(i) })
+    if (d[i] === '4' && i + 1 < d.length) options.push({ w: Number(d.slice(0, i)), r: Number(d.slice(i + 1)), rs: d.slice(i + 1) })
+  }
+  const valid = options.filter(o => o.r >= 1 && o.r <= 30 && o.w >= 5 && o.w <= 1500 && !o.rs.startsWith('0'))
+  if (!valid.length) return null
+  const score = (o: { w: number; r: number }) => (targetWeight ? Math.abs(o.w - targetWeight) / targetWeight : -o.w / 1000)
+  const best = valid.sort((a, b) => score(a) - score(b))[0]
+  if (targetWeight && Math.abs(best.w - targetWeight) / targetWeight > 0.6) return null
+  return { weight: best.w, reps: best.r, fixed: true }
 }
