@@ -32,3 +32,4 @@ yarn-error.log*
 next-env.d.ts
 # local build snapshots
 *.tgz
+_to_delete/

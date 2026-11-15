@@ -17,7 +17,7 @@ CREATE TABLE coaches (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE athletes (vscode-webview://1vt6e0vghp4b3s30sfou97aueppj44o0mh051s2lj1u8lkv6neoj/peac-app/src/app/coach/messages/
+CREATE TABLE athletes (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
   coach_id        UUID REFERENCES coaches(id) ON DELETE SET NULL,
