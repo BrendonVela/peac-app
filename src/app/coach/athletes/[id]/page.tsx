@@ -8,6 +8,7 @@ import { getReadinessBadge, getReadinessLabel, formatDate } from '@/lib/utils'
 import { AddPerformanceTestForm } from './AddPerformanceTestForm'
 import { loadTestDefs, findTest } from '@/lib/tests'
 import { PhaseDatesForm } from './PhaseDatesForm'
+import { VisibilityForm } from './VisibilityForm'
 import { MaxesForm } from './MaxesForm'
 import { ManageAthlete } from './ManageAthlete'
 import { LinkAccount, type SignedUpAthlete } from './LinkAccount'
@@ -163,6 +164,7 @@ export default async function AthleteDetailPage({
                       </div>
                       <div className="flex flex-wrap items-end justify-between gap-2">
                         <PhaseDatesForm assignmentId={a.id} athleteId={params.id} startDate={a.startDate} startWeek={a.startWeek} phaseStarts={a.phaseStarts} phases={a.phases} />
+                        <VisibilityForm assignmentId={a.id} athleteId={params.id} visibility={a.visibility} visibleWeeks={a.visibleWeeks} visibleThrough={a.visibleThrough} totalWeeks={a.totalWeeks} phases={a.phases} />
                         <span className="text-xs text-zinc-500">
                           <span className="text-green-400">{done} done</span>
                           {missed > 0 && <> · <span className="text-red-400">{missed} missed</span></>}

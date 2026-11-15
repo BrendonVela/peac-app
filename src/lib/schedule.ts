@@ -112,6 +112,29 @@ export interface AssignmentInfo {
   startWeek: number                    // 1 = from the beginning; 17 = start at week 17 (earlier weeks skipped)
   phaseStarts: Record<string, string>  // week number -> date that week starts (later phases)
   phases: PhaseInfo[]
+  /** What the athlete can see: 'all', 'ahead' (this week + visibleWeeks-1), 'through' (up to week visibleWeeks) */
+  visibility: 'all' | 'ahead' | 'through'
+  visibleWeeks: number
+  /** Last program week the athlete can see right now (null = everything) */
+  visibleThrough: number | null
+  /** The program week the athlete is on today (null = hasn't started / finished) */
+  currentWeek: number | null
+}
+
+/** Last week the athlete can see (same rule as the database's assignment_visible_through) */
+export function visibleThroughWeek(
+  visibility: string | null | undefined, visibleWeeks: number, startWeek: number, startDate: string,
+  phaseStarts: Record<string, string>, today: string
+): number | null {
+  const v = visibility ?? 'all'
+  if (v === 'all') return null
+  if (v === 'through') return Math.max(1, visibleWeeks)
+  let cur = startWeek
+  for (let wn = startWeek; wn <= startWeek + 520; wn++) {
+    if (weekStartFor(wn, startWeek, startDate, phaseStarts) > today) break
+    cur = wn
+  }
+  return cur + Math.max(1, visibleWeeks) - 1
 }
 
 /** "Phase 5 — Week 2" -> "Phase 5" (falls back to the whole title) */
@@ -180,7 +203,8 @@ function buildSchedule(
   assignmentRows: Row[],
   programsById: Map<string, Row>,
   results: Row[],
-  overrideRows: Row[]
+  overrideRows: Row[],
+  athleteView = false
 ): AthleteSchedule {
   // Exercise completion: workout_exercise_id -> latest completed timestamp
   const completedAt = new Map<string, string>()
@@ -217,8 +241,14 @@ function buildSchedule(
     const totalWeeks = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : 0
     const startWeek = Math.max(1, Number(a.start_week) || 1)
     const phaseStarts: Record<string, string> = (a.phase_starts && typeof a.phase_starts === 'object') ? a.phase_starts : {}
-    // Weeks before where the athlete started are skipped (not shown, not "missed")
-    const weekNumbers = allWeeks.filter(wn => wn >= startWeek)
+    const visibility = (a.visibility === 'ahead' || a.visibility === 'through') ? a.visibility : 'all'
+    const visibleWeeks = Math.max(1, Number(a.visible_weeks) || 1)
+    const visibleThrough = visibleThroughWeek(visibility, visibleWeeks, startWeek, startDate, phaseStarts, today)
+    let currentWeek: number | null = null
+    for (const wn of allWeeks) if (wn >= startWeek && weekStartFor(wn, startWeek, startDate, phaseStarts) <= today) currentWeek = wn
+    // Weeks before where the athlete started are skipped (not shown, not "missed").
+    // Athlete screens also skip weeks the coach is keeping hidden.
+    const weekNumbers = allWeeks.filter(wn => wn >= startWeek && (!athleteView || visibleThrough === null || wn <= visibleThrough))
 
     assignments.push({
       id: a.id,
@@ -229,6 +259,7 @@ function buildSchedule(
       startWeek,
       phaseStarts,
       phases: programPhases(program.training_blocks ?? []),
+      visibility, visibleWeeks, visibleThrough, currentWeek,
     })
 
     weekNumbers.forEach(wn => {
@@ -272,7 +303,7 @@ function buildSchedule(
           programId: program.id,
           programTitle: program.title,
           weekNumber: wn,
-          totalWeeks,
+          totalWeeks: athleteView && visibility !== 'all' ? 0 : totalWeeks,
           dayNumber: k + 1,
           weekStart,
           weekEnd,
@@ -292,8 +323,8 @@ function buildSchedule(
 
 /** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getAthleteSchedule(supabase: any, athleteId: string): Promise<AthleteSchedule> {
-  const map = await getTeamSchedules(supabase, [athleteId])
+export async function getAthleteSchedule(supabase: any, athleteId: string, opts: { athleteView?: boolean } = {}): Promise<AthleteSchedule> {
+  const map = await getTeamSchedules(supabase, [athleteId], opts)
   return map.get(athleteId) ?? { today: todayISO(), assignments: [], items: [] }
 }
 
@@ -302,7 +333,7 @@ export async function getAthleteSchedule(supabase: any, athleteId: string): Prom
  * Returns athleteId -> schedule.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getTeamSchedules(supabase: any, athleteIds: string[]): Promise<Map<string, AthleteSchedule>> {
+export async function getTeamSchedules(supabase: any, athleteIds: string[], opts: { athleteView?: boolean } = {}): Promise<Map<string, AthleteSchedule>> {
   const today = todayISO()
   const out = new Map<string, AthleteSchedule>()
   const ids = Array.from(new Set(athleteIds.filter(Boolean)))
@@ -314,7 +345,7 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[]): Pro
   for (const part of chunk(ids, 100)) {
     const [a0, r, o] = await Promise.all([
       fetchAll<Row>((from, to) =>
-        supabase.from('program_assignments').select('id, athlete_id, program_id, assigned_at, start_date, start_week, phase_starts').in('athlete_id', part).range(from, to)),
+        supabase.from('program_assignments').select('*').in('athlete_id', part).range(from, to)),
       fetchAll<Row>((from, to) =>
         supabase.from('workout_results').select('athlete_id, workout_id, workout_exercise_id, completed, logged_at').in('athlete_id', part).order('logged_at').range(from, to)),
       fetchAll<Row>((from, to) =>
@@ -345,7 +376,7 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[]): Pro
   }
   const aBy = group(assignments), rBy = group(results), oBy = group(overrides)
   for (const id of ids) {
-    out.set(id, buildSchedule(today, aBy.get(id) ?? [], programsById, rBy.get(id) ?? [], oBy.get(id) ?? []))
+    out.set(id, buildSchedule(today, aBy.get(id) ?? [], programsById, rBy.get(id) ?? [], oBy.get(id) ?? [], !!opts.athleteView))
   }
   return out
 }

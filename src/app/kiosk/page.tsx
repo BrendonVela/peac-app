@@ -20,7 +20,7 @@ export default async function KioskHome() {
   const { data: athletes } = await supabase.from('athletes').select('id, name').eq('coach_id', coach.id).order('name')
   const today = todayISO()
   const roster = (athletes ?? []) as { id: string; name: string }[]
-  const team = await getTeamSchedules(supabase, roster.map(a => a.id)).catch(() => new Map<string, AthleteSchedule>())
+  const team = await getTeamSchedules(supabase, roster.map(a => a.id), { athleteView: true }).catch(() => new Map<string, AthleteSchedule>())
   const list = await Promise.all(
     roster.map(async a => {
       const s = team.get(a.id) ?? null

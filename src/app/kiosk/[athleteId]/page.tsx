@@ -21,7 +21,7 @@ export default async function KioskAthlete({ params }: { params: { athleteId: st
   if (!athlete) notFound()
   if (athlete.coach_id !== coach?.id && isAdmin !== true) redirect('/kiosk')
 
-  const schedule = await getAthleteSchedule(supabase, athlete.id)
+  const schedule = await getAthleteSchedule(supabase, athlete.id, { athleteView: true })
   const today = todayISO()
   const weekStart = startOfWeek(today)
   const weekEnd = addDays(weekStart, 7)

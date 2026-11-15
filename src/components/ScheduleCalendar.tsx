@@ -314,7 +314,7 @@ export function ScheduleCalendar({ items, athleteId, today, month, basePath, mod
               <Badge variant={STATUS_BADGE[selected.status]}>{STATUS_LABEL[selected.status]}</Badge>
               <span>{selected.programTitle}</span>
               <span>·</span>
-              <span>Week {selected.weekNumber} of {selected.totalWeeks}</span>
+              <span>Week {selected.weekNumber}{selected.totalWeeks ? ` of ${selected.totalWeeks}` : ''}</span>
               <span>·</span>
               <span>{selected.doneCount}/{selected.exerciseCount} exercises</span>
             </div>

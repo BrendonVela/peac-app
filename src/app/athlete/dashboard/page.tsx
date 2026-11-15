@@ -26,7 +26,7 @@ export default async function AthleteDashboard() {
 
   if (!athlete) redirect('/login')
 
-  const schedule = await getAthleteSchedule(supabase, athlete.id)
+  const schedule = await getAthleteSchedule(supabase, athlete.id, { athleteView: true })
   const today = schedule.today
 
   const [{ data: checkIn }, { data: recentTests }] = await Promise.all([
@@ -98,7 +98,7 @@ export default async function AthleteDashboard() {
                 <div className="min-w-0">
                   <CardTitle>This Week</CardTitle>
                   <p className="text-xs text-zinc-500 mt-1 truncate">
-                    {first.programTitle} · Week {first.weekNumber} of {first.totalWeeks} · {formatMonthDay(first.weekStart)} – {formatMonthDay(first.weekEnd)}
+                    {first.programTitle} · Week {first.weekNumber}{first.totalWeeks ? ` of ${first.totalWeeks}` : ''} · {formatMonthDay(first.weekStart)} – {formatMonthDay(first.weekEnd)}
                   </p>
                 </div>
                 <Badge variant={doneCount === list.length ? 'green' : 'blue'} className="shrink-0">

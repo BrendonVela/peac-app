@@ -45,7 +45,7 @@ function pickWorkout(items: ScheduledWorkout[], today: string) {
 export async function voiceWelcome() {
   const ctx = await me()
   if (!ctx) return { text: '' }
-  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id)
+  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id, { athleteView: true })
   const p = pickWorkout(s.items, s.today)
   const hi = `Welcome back, ${first(ctx.athlete.name)}.`
   if (p?.when === 'today') {
@@ -58,7 +58,7 @@ export async function voiceWelcome() {
 export async function voiceToday() {
   const ctx = await me()
   if (!ctx) return { text: 'Please sign in again.' }
-  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id)
+  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id, { athleteView: true })
   const p = pickWorkout(s.items, s.today)
   if (!p) return { text: "You don't have any workouts left this week. Nice work." }
   if (p.when === 'today') return { text: `Today is ${p.w.title}, ${p.w.exerciseCount} exercises${p.w.doneCount ? `, ${p.w.doneCount} already done` : ''}. Say "let's go" to start.`, workoutId: p.w.workoutId }
@@ -131,7 +131,7 @@ const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frida
 export async function voiceMove(day: string) {
   const ctx = await me()
   if (!ctx) return { text: 'Please sign in again.' }
-  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id)
+  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id, { athleteView: true })
   const p = pickWorkout(s.items, s.today)
   if (!p) return { text: "There's no open workout to move." }
   const today = todayISO()
@@ -181,7 +181,7 @@ export async function voiceNextForm() {
 export async function voiceSchedule(when: string) {
   const ctx = await me()
   if (!ctx) return { text: 'Please sign in again.' }
-  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id)
+  const s = await getAthleteSchedule(ctx.supabase, ctx.athlete.id, { athleteView: true })
   const today = s.today
   let from = today, to = today, label = 'Today'
   if (when === 'tomorrow') { from = to = addDays(today, 1); label = `Tomorrow, ${dayName(from)},` }

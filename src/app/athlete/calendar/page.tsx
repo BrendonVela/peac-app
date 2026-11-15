@@ -21,7 +21,7 @@ export default async function AthleteCalendarPage({
     .single()
   if (!athlete) redirect('/login')
 
-  const schedule = await getAthleteSchedule(supabase, athlete.id)
+  const schedule = await getAthleteSchedule(supabase, athlete.id, { athleteView: true })
   const month = /^\d{4}-\d{2}$/.test(searchParams.month ?? '') ? searchParams.month! : schedule.today.slice(0, 7)
 
   return (

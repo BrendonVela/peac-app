@@ -73,3 +73,19 @@ export async function updateAssignmentPhases(
   revalidateSchedulePages(athleteId)
   return { ok: true }
 }
+
+/** How far ahead the athlete can see this program: everything, the next N weeks, or up to a set week */
+export async function updateAssignmentVisibility(assignmentId: string, athleteId: string, visibility: 'all' | 'ahead' | 'through', visibleWeeks: number) {
+  if (!['all', 'ahead', 'through'].includes(visibility)) return { error: 'Invalid choice' }
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('program_assignments')
+    .update({ visibility, visible_weeks: Math.max(1, Math.round(visibleWeeks) || 1) })
+    .eq('id', assignmentId)
+  if (error) {
+    if (/visibility|visible_weeks/.test(error.message)) return { error: 'Run the program_visibility SQL in Supabase first (see setup steps).' }
+    return { error: error.message }
+  }
+  revalidateSchedulePages(athleteId)
+  return { ok: true }
+}
