@@ -2,7 +2,7 @@
 
 import { todayISO, startOfWeek } from './schedule'
 
-export type QuestionType = 'scale' | 'yesno' | 'text' | 'number' | 'choice'
+export type QuestionType = 'scale' | 'yesno' | 'text' | 'number' | 'choice' | 'multi'
 
 export interface Question {
   id: string
@@ -35,8 +35,11 @@ export const TYPE_LABEL: Record<QuestionType, string> = {
   yesno: 'Yes / No',
   text: 'Short answer',
   number: 'Number',
-  choice: 'Multiple choice',
+  choice: 'Pick one',
+  multi: 'Pick all that apply',
 }
+
+export const hasOptions = (t: QuestionType) => t === 'choice' || t === 'multi'
 
 /** Which "slot" a response belongs to: once, today, or this week */
 export function currentPeriod(freq: FormRow['frequency']): string {
@@ -48,5 +51,6 @@ export function currentPeriod(freq: FormRow['frequency']): string {
 export function formatAnswer(q: Question, v: unknown): string {
   if (v === null || v === undefined || v === '') return '—'
   if (q.type === 'yesno') return v ? 'Yes' : 'No'
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—'
   return String(v)
 }

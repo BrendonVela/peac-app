@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { coachMatch } from '@/lib/acting'
 import { Card, CardContent } from '@/components/ui/Card'
 import { FREQ_LABEL, formatAnswer, type FormRow } from '@/lib/forms'
-import { ExportCsvButton } from './ExportCsvButton'
+import { ExportCsvButton, ExportExcelButton } from './ExportCsvButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,11 +19,11 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
   const f = form as FormRow
 
   const [{ data: responses }, { data: athletes }] = await Promise.all([
-    supabase.from('form_responses').select('athlete_id, period, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(1000),
+    supabase.from('form_responses').select('id, athlete_id, period, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(1000),
     supabase.from('athletes').select('id, name').eq('coach_id', coach.id).order('name'),
   ])
   const nameOf = new Map((athletes ?? []).map((a: any) => [a.id, a.name]))
-  const rows = (responses ?? []) as { athlete_id: string; period: string; answers: Record<string, unknown>; submitted_at: string }[]
+  const rows = (responses ?? []) as { id: string; athlete_id: string; period: string; answers: Record<string, unknown>; submitted_at: string }[]
   const answered = new Set(rows.map(r => r.athlete_id))
   const missing = (athletes ?? []).filter((a: any) => !answered.has(a.id))
 
@@ -34,13 +34,19 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link href="/coach/forms" className="text-zinc-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></Link>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{f.title}</h1>
           <p className="text-sm text-zinc-400">{FREQ_LABEL[f.frequency]} · {rows.length} responses</p>
         </div>
-        <ExportCsvButton rows={csv} filename={`${f.title.replace(/[^\w]+/g, '-')}.csv`} />
+        <div className="flex flex-wrap gap-2">
+          <a href={`/print/forms/${f.id}`} className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:text-white">
+            <FileText className="w-3.5 h-3.5" /> PDF (all)
+          </a>
+          <ExportExcelButton rows={csv} filename={`${f.title.replace(/[^\w]+/g, '-')}.xlsx`} sheet={f.title} />
+          <ExportCsvButton rows={csv} filename={`${f.title.replace(/[^\w]+/g, '-')}.csv`} />
+        </div>
       </div>
 
       {missing.length > 0 && f.frequency === 'once' && (
@@ -60,7 +66,10 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
             <tbody className="divide-y divide-zinc-800">
               {rows.map((r, i) => (
                 <tr key={i} className="align-top">
-                  <td className="px-4 py-2.5 text-white whitespace-nowrap">{nameOf.get(r.athlete_id) ?? 'Athlete'}</td>
+                  <td className="px-4 py-2.5 text-white whitespace-nowrap">
+                    {nameOf.get(r.athlete_id) ?? 'Athlete'}
+                    <a href={`/print/forms/${f.id}?r=${r.id}`} className="ml-2 text-xs text-blue-400 hover:text-blue-300">PDF</a>
+                  </td>
                   <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap">{new Date(r.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                   {f.questions.map(q => {
                     const v = r.answers?.[q.id]

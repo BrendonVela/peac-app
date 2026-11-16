@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { FREQ_LABEL, type FormRow } from '@/lib/forms'
 import { FormEditor } from './FormEditor'
 import { FormRowActions } from './FormRowActions'
+import { ImportForm } from './ImportForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,11 +38,13 @@ export default async function CoachFormsPage() {
         <FormEditor trigger={<Button size="sm"><Plus className="w-4 h-4" /> New form</Button>} />
       </div>
 
+      <ImportForm />
+
       {list.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center space-y-2">
             <ClipboardList className="w-8 h-8 text-zinc-600 mx-auto" />
-            <p className="text-sm text-zinc-400">No forms yet. Tap <b>New form</b> — you can start from a template.</p>
+            <p className="text-sm text-zinc-400">No forms yet. Tap <b>New form</b> to start from a template, or import one above.</p>
           </CardContent>
         </Card>
       ) : (

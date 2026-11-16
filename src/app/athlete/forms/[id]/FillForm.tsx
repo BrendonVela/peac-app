@@ -35,6 +35,11 @@ export function FillForm({ form, initial }: { form: FormRow; initial: Record<str
       const low = t.toLowerCase()
       return (q.options ?? []).find(o => low.includes(o.toLowerCase()) || o.toLowerCase().includes(low))
     }
+    if (q.type === 'multi') {
+      const low = t.toLowerCase()
+      const hits = (q.options ?? []).filter(o => low.includes(o.toLowerCase()) || low.includes(o.toLowerCase().split(/[ /(]/)[0]))
+      return hits.length ? hits : undefined
+    }
     return t || undefined
   }
 
@@ -49,7 +54,7 @@ export function FillForm({ form, initial }: { form: FormRow; initial: Record<str
       const q = form.questions[i]
       setActiveQ(i)
       document.getElementById(`fq-${q.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      const how = q.type === 'scale' ? ' From 1 to 10.' : q.type === 'yesno' ? ' Yes or no.' : q.type === 'choice' ? ` Say ${(q.options ?? []).join(', or ')}.` : ''
+      const how = q.type === 'scale' ? ' From 1 to 10.' : q.type === 'yesno' ? ' Yes or no.' : q.type === 'choice' ? ` Say ${(q.options ?? []).join(', or ')}.` : q.type === 'multi' ? ` Say any that apply: ${(q.options ?? []).join(', ')}.` : ''
       let prompt = `Question ${i + 1}. ${q.label}.${how}`
       for (let attempt = 0; attempt < 2; attempt++) {
         const ans = await ask(prompt)
@@ -58,7 +63,7 @@ export function FillForm({ form, initial }: { form: FormRow; initial: Record<str
         if (/^(skip|pass)\b/i.test(ans.trim())) break
         const v = heard(q, ans)
         if (v !== undefined) { set(q.id, v); break }
-        prompt = q.type === 'choice' ? `Sorry. Say one of: ${(q.options ?? []).join(', ')}.` : q.type === 'yesno' ? 'Sorry, yes or no?' : 'Sorry, say a number.'
+        prompt = q.type === 'choice' || q.type === 'multi' ? `Sorry. Say one of: ${(q.options ?? []).join(', ')}.` : q.type === 'yesno' ? 'Sorry, yes or no?' : 'Sorry, say a number.'
       }
     }
     setActiveQ(null)
@@ -121,6 +126,20 @@ export function FillForm({ form, initial }: { form: FormRow; initial: Record<str
           {q.type === 'choice' && (
             <div className="flex flex-wrap gap-2">
               {(q.options ?? []).map(o => <button key={o} onClick={() => set(q.id, o)} className={pill(answers[q.id] === o)}>{o}</button>)}
+            </div>
+          )}
+          {q.type === 'multi' && (
+            <div className="flex flex-wrap gap-2">
+              {(q.options ?? []).map(o => {
+                const picked = Array.isArray(answers[q.id]) ? (answers[q.id] as string[]) : []
+                const on = picked.includes(o)
+                return (
+                  <button key={o} onClick={() => set(q.id, on ? picked.filter(x => x !== o) : [...picked, o])} aria-pressed={on} className={pill(on)}>
+                    {on ? '✓ ' : ''}{o}
+                  </button>
+                )
+              })}
+              <p className="basis-full text-xs text-zinc-500">Pick all that apply.</p>
             </div>
           )}
           {q.type === 'number' && (

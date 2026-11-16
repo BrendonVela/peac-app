@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getActingCoachId } from './viewAs'
-import { currentPeriod, type Question, type FormRow } from '@/lib/forms'
+import { currentPeriod, hasOptions, type Question, type FormRow } from '@/lib/forms'
 
 function clean(questions: Question[]): Question[] {
   return questions
@@ -12,7 +12,7 @@ function clean(questions: Question[]): Question[] {
       label: String(q.label ?? '').trim(),
       type: q.type,
       required: !!q.required,
-      ...(q.type === 'choice' ? { options: (q.options ?? []).map(o => o.trim()).filter(Boolean) } : {}),
+      ...(hasOptions(q.type) ? { options: (q.options ?? []).map(o => o.trim()).filter(Boolean) } : {}),
     }))
     .filter(q => q.label)
 }
@@ -32,7 +32,8 @@ export async function saveForm(form: {
   if (!form.title.trim()) return { error: 'Give the form a title.' }
   const questions = clean(form.questions)
   if (questions.length === 0) return { error: 'Add at least one question.' }
-  if (questions.some(q => q.type === 'choice' && (q.options?.length ?? 0) < 2)) return { error: 'Multiple-choice questions need at least 2 options.' }
+  const few = questions.find(q => hasOptions(q.type) && (q.options?.length ?? 0) < 2)
+  if (few) return { error: `"${few.label}" needs at least 2 options.` }
 
   const row = {
     coach_id: coachId,
@@ -82,7 +83,7 @@ export async function submitFormResponse(formId: string, answers: Record<string,
 
   for (const q of form.questions) {
     const v = answers[q.id]
-    if (q.required && (v === undefined || v === null || v === '')) return { error: `Please answer: ${q.label}` }
+    if (q.required && (v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))) return { error: `Please answer: ${q.label}` }
   }
   const { error } = await supabase.from('form_responses').upsert(
     { form_id: formId, athlete_id: athlete.id, period: currentPeriod(form.frequency), answers, submitted_at: new Date().toISOString() },
