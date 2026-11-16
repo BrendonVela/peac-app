@@ -2,13 +2,14 @@ import { createClient } from '@/lib/supabase/server'
 import { athleteMatch } from '@/lib/acting'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Dumbbell, ChevronRight, Heart, CalendarDays, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Dumbbell, ChevronRight, CalendarDays, AlertTriangle, CheckCircle2, Play } from 'lucide-react'
+import { VideoBackground } from '@/components/brand/VideoBackground'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { getReadinessBadge, getReadinessLabel } from '@/lib/utils'
 import {
-  getAthleteSchedule, formatMonthDay, formatWeekday, formatShortDate,
+  getAthleteSchedule, formatMonthDay, formatWeekday, formatShortDate, addDays,
   STATUS_LABEL, STATUS_BADGE, type ScheduledWorkout,
 } from '@/lib/schedule'
 import { getMyForms } from '@/lib/dueForms'
@@ -66,20 +67,127 @@ export default async function AthleteDashboard() {
 
   const { due: dueForms } = await getMyForms(supabase, athlete.id)
 
+  // ---------- Hero: the next workout to do ----------
+  const pending = thisWeek
+    .filter(i => i.status !== 'done')
+    .sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.dayNumber - b.dayNumber)
+  const upNext = pending.find(i => i.plannedDate === today)
+    ?? pending.find(i => i.status === 'in_progress')
+    ?? pending.find(i => i.plannedDate > today)
+    ?? pending[0]
+    ?? null
+  const weekDone = thisWeek.filter(i => i.status === 'done').length
+  const allTimeDone = schedule.items.filter(i => i.status === 'done').length
+  const weekComplete = thisWeek.length > 0 && weekDone === thisWeek.length
+
+  // ---------- Week strip (Mon–Sun) ----------
+  const dow = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7 // 0 = Monday
+  const monday = addDays(today, -dow)
+  const days = Array.from({ length: 7 }, (_, k) => {
+    const date = addDays(monday, k)
+    const onDay = thisWeek.filter(i => (i.completedDate ?? i.plannedDate) === date)
+    const done = onDay.length > 0 && onDay.every(i => i.status === 'done')
+    return {
+      date,
+      letter: 'MTWTFSS'[k],
+      num: Number(date.slice(8)),
+      kind: done ? 'done' : date === today ? 'today' : onDay.length > 0 ? 'planned' : 'rest',
+    }
+  })
+  const firstName = athlete.name.split(' ')[0]
+  const coachName = ((athlete as any).coaches as any)?.name as string | undefined
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Hey, {athlete.name.split(' ')[0]} 👊</h1>
-        {(athlete as any).coaches && (
-          <p className="text-zinc-400 text-sm mt-0.5">
-            Coach: {((athlete as any).coaches as any).name}
-          </p>
-        )}
+        <p className="text-sm text-zinc-400 font-medium">
+          {formatWeekday(today)}, {formatMonthDay(today)}{coachName ? ` · Coach ${coachName}` : ''}
+        </p>
+        <h1 className="mt-1">Let&apos;s work, {firstName}</h1>
       </div>
+
+      {/* Hero: next workout */}
+      <section className="relative overflow-hidden rounded-3xl min-h-[280px] flex flex-col justify-end">
+        <VideoBackground clip="home" overlay="card" />
+        <div className="relative p-5 sm:p-6 space-y-3">
+          {upNext ? (
+            <>
+              <span className="inline-block rounded-full bg-blue-500 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-ink">
+                {upNext.status === 'in_progress' ? 'Keep going' : upNext.plannedDate === today ? "Today's workout" : `Up next · ${formatWeekday(upNext.plannedDate)}`}
+              </span>
+              <h2 className="font-display italic font-extrabold uppercase text-4xl sm:text-5xl leading-[0.95]">{upNext.title}</h2>
+              <p className="text-sm text-zinc-300">
+                {upNext.programTitle} · Week {upNext.weekNumber} · {upNext.exerciseCount} exercises
+                {upNext.doneCount > 0 ? ` · ${upNext.doneCount} done` : ''}
+              </p>
+              <Link
+                href={`/athlete/workout/${upNext.workoutId}`}
+                className="mt-1 flex h-14 items-center justify-center gap-2 rounded-2xl bg-blue-500 font-display text-xl font-extrabold uppercase tracking-wider text-ink hover:brightness-110 sm:max-w-xs"
+              >
+                <Play className="w-5 h-5 fill-ink" />
+                {upNext.status === 'in_progress' ? 'Continue workout' : 'Start workout'}
+              </Link>
+            </>
+          ) : weekComplete ? (
+            <>
+              <span className="peac-pop inline-flex w-14 h-14 items-center justify-center rounded-full bg-volt">
+                <CheckCircle2 className="w-8 h-8 text-ink" />
+              </span>
+              <h2 className="font-display italic font-extrabold uppercase text-4xl leading-[0.95]">Week done.</h2>
+              <p className="text-sm text-zinc-300">Every workout this week is finished. Recover well.</p>
+            </>
+          ) : (
+            <>
+              <h2 className="font-display italic font-extrabold uppercase text-4xl leading-[0.95]">Rest day</h2>
+              <p className="text-sm text-zinc-300">
+                {notStarted.length > 0 ? `Your program starts ${formatShortDate(notStarted[0].startDate)}.` : 'No workouts this week. Rest up.'}
+              </p>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-line bg-panel p-4">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">This week</p>
+          <p className="mt-1 font-display text-4xl font-extrabold leading-none">
+            {weekDone}<span className="text-lg text-zinc-400"> / {thisWeek.length} done</span>
+          </p>
+        </div>
+        <div className="rounded-2xl border border-line bg-panel p-4">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Workouts done</p>
+          <p className="mt-1 font-display text-4xl font-extrabold leading-none">
+            {allTimeDone}<span className="text-lg text-zinc-400"> total</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Week strip */}
+      <Link href="/athlete/calendar" className="block rounded-2xl border border-line bg-panel p-4" aria-label="Open calendar">
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {days.map(d => (
+            <div key={d.date} className="flex flex-col items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-400">{d.letter}</span>
+              <span
+                className={
+                  'flex w-9 h-9 items-center justify-center rounded-full text-sm font-bold ' +
+                  (d.kind === 'done' ? 'bg-volt text-ink'
+                    : d.kind === 'today' ? 'border-2 border-blue-500 text-white'
+                    : d.kind === 'planned' ? 'bg-panel2 text-white'
+                    : 'text-zinc-600')
+                }
+              >
+                {d.num}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Link>
 
       {dueForms.length > 0 && (
         <Link href={dueForms.length === 1 ? `/athlete/forms/${dueForms[0].id}` : '/athlete/forms'} className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <span className="text-xl">📋</span>
+          <span className="text-xl" aria-hidden="true">📋</span>
           <span className="flex-1 text-sm text-amber-100">
             Your coach needs you to fill out <b>{dueForms.length === 1 ? dueForms[0].title : `${dueForms.length} forms`}</b>.
           </span>
@@ -159,7 +267,7 @@ export default async function AthleteDashboard() {
           <CardContent className="py-8 text-center text-sm text-zinc-500">
             {notStarted.length > 0
               ? `Your program starts ${formatShortDate(notStarted[0].startDate)}.`
-              : 'No workouts this week. Rest up! 💤'}
+              : 'No workouts this week. Rest up!'}
           </CardContent>
         </Card>
       )}

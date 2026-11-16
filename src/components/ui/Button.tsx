@@ -14,7 +14,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',
+          'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',
           {
             'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800': variant === 'primary',
             'bg-zinc-800 text-white hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-700': variant === 'secondary',
@@ -22,7 +22,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             'bg-red-600 text-white hover:bg-red-700': variant === 'danger',
             'text-xs px-3 py-1.5': size === 'sm',
             'text-sm px-4 py-2.5': size === 'md',
-            'text-base px-6 py-3': size === 'lg',
+            'font-display text-xl uppercase tracking-wider px-6 h-14': size === 'lg',
           },
           className
         )}

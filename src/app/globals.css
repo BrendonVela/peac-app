@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -17,7 +17,7 @@
   }
 
   body {
-    background-color: #09090b;
+    background-color: #07080A;
     color: #ffffff;
     font-family: 'Inter', system-ui, sans-serif;
   }
@@ -31,6 +31,44 @@
   input[type='range'] {
     accent-color: #2563eb;
   }
+
+  /* Bold sports headings: big condensed caps. Low specificity so a class on the h1 still wins. */
+  :where(main) h1 {
+    font-family: 'Barlow Condensed', Inter, system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 2.25rem;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+}
+
+/* ---------- Background motion (used behind heroes when no video clip is set) ---------- */
+.peac-aurora {
+  background:
+    radial-gradient(60% 55% at 15% 15%, color-mix(in srgb, var(--brand, #3D86FF) 38%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 90% 25%, rgba(198, 255, 61, 0.10), transparent 70%),
+    radial-gradient(70% 60% at 55% 110%, color-mix(in srgb, var(--brand, #3D86FF) 22%, transparent), transparent 70%),
+    #0D1016;
+  background-size: 180% 180%;
+  animation: peac-aurora 16s ease-in-out infinite alternate;
+}
+.peac-lines {
+  background-image: repeating-linear-gradient(115deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 28px);
+}
+@keyframes peac-aurora {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+@keyframes peac-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.peac-pop { animation: peac-pop 0.6s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .peac-aurora, .peac-pop { animation: none; }
+  .peac-video { display: none; }
 }
 
 /* ---------- Phone / installed-app layout ---------- */

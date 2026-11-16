@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { PeacLogo } from '@/components/brand/PeacLogo'
+import { VideoBackground } from '@/components/brand/VideoBackground'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -48,69 +49,73 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-950">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-10">
-          <Zap className="w-8 h-8 text-blue-500 fill-blue-500" />
-          <span className="text-2xl font-bold tracking-tight">PEAC</span>
+    <div className="relative min-h-screen overflow-hidden bg-ink">
+      <VideoBackground clip="login" overlay="bottom" />
+      <div className="relative min-h-screen flex flex-col items-center px-5 pt-[max(4rem,env(safe-area-inset-top))] pb-10">
+        {/* Big centered logo */}
+        <div className="flex flex-col items-center text-center mt-[6vh]">
+          <PeacLogo size="xl" stacked />
+          <p className="mt-5 font-display italic font-extrabold uppercase text-3xl leading-none tracking-wide">
+            Train with <span className="text-blue-400">purpose.</span>
+          </p>
+          <p className="mt-3 text-sm text-zinc-300 max-w-xs">Your program, your coach and your progress in one place.</p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
-          <h1 className="text-xl font-semibold mb-1">Welcome back</h1>
-          <p className="text-sm text-zinc-400 mb-6">Sign in to your account</p>
+        <div className="w-full max-w-sm mt-auto pt-10">
+          <div className="bg-panel/80 backdrop-blur-md border border-line rounded-3xl p-6">
+            <h1 className="sr-only">Sign in</h1>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Input
+                label="Email"
+                id="email"
+                name="email"
+                type="email"
+                placeholder="you@school.edu"
+                required
+                autoComplete="email"
+              />
+              <Input
+                label="Password"
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+              />
+              <div className="flex justify-end -mt-2">
+                <Link href="/forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
+                  Forgot password?
+                </Link>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Email"
-              id="email"
-              name="email"
-              type="email"
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-            <Input
-              label="Password"
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              required
-              autoComplete="current-password"
-            />
-            <div className="flex justify-end -mt-2">
-              <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
-                Forgot password?
-              </Link>
-            </div>
+              {error && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {error}
+                </p>
+              )}
 
-            {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
+              <Button type="submit" loading={loading} className="w-full" size="lg">
+                Log in
+              </Button>
+            </form>
+          </div>
 
-            <Button type="submit" loading={loading} className="w-full" size="lg">
-              Sign In
-            </Button>
-          </form>
+          {deletedNotice && (
+            <p className="text-center text-sm text-green-400 mt-4">Your account has been deleted.</p>
+          )}
+          <p className="text-center text-sm text-zinc-300 mt-6">
+            New here?{' '}
+            <Link href="/register" className="text-blue-400 hover:text-blue-300 font-semibold">
+              Join with your team code
+            </Link>
+          </p>
+          <p className="text-center text-xs text-zinc-500 mt-4">
+            <Link href="/terms" className="hover:text-zinc-300">Terms</Link>
+            <span className="mx-2">·</span>
+            <Link href="/privacy" className="hover:text-zinc-300">Privacy Policy</Link>
+          </p>
         </div>
-
-        {deletedNotice && (
-          <p className="text-center text-sm text-green-400 mt-4">Your account has been deleted.</p>
-        )}
-        <p className="text-center text-sm text-zinc-500 mt-6">
-          Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium">
-            Sign up
-          </Link>
-        </p>
-        <p className="text-center text-xs text-zinc-600 mt-4">
-          <Link href="/terms" className="hover:text-zinc-400">Terms</Link>
-          <span className="mx-2">·</span>
-          <Link href="/privacy" className="hover:text-zinc-400">Privacy Policy</Link>
-        </p>
       </div>
     </div>
   )

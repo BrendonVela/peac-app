@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Zap } from 'lucide-react'
+import { PeacLogo } from '@/components/brand/PeacLogo'
 import { createClient } from '@/lib/supabase/server'
 import { CoachJoinForm } from './CoachJoinForm'
 
@@ -45,8 +45,7 @@ export default async function JoinCoachPage({ params }: { params: { code: string
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-950">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2.5 mb-10">
-          <Zap className="w-8 h-8 text-blue-500 fill-blue-500" />
-          <span className="text-2xl font-bold tracking-tight">PEAC</span>
+          <PeacLogo size="lg" />
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">{content}</div>
         <p className="text-center text-xs text-zinc-600 mt-4">

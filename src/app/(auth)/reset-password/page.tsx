@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { PeacLogo } from '@/components/brand/PeacLogo'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Zap } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
@@ -64,8 +64,7 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-zinc-950">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2.5 mb-10">
-          <Zap className="w-8 h-8 text-blue-500 fill-blue-500" />
-          <span className="text-2xl font-bold tracking-tight">PEAC</span>
+          <PeacLogo size="lg" />
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">

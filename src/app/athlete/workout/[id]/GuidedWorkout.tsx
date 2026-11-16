@@ -1,5 +1,6 @@
 'use client'
 
+import { VideoBackground } from '@/components/brand/VideoBackground'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ask, dispatchCommand, getLogger, getVoiceSettings, onVoiceCommand, speak } from '@/lib/voice/core'
 import { parseCommand, readSetNumbers, normalizeNumbers, sanitySet } from '@/lib/voice/parse'
@@ -334,8 +335,8 @@ export function GuidedWorkout({
                   onClick={() => go(i)}
                   aria-label={`Go to ${s.title}`}
                   className={cn(
-                    'h-1.5 flex-1 rounded-full transition-colors',
-                    i === index ? 'bg-blue-500' : stepDone(s) ? 'bg-green-500' : 'bg-zinc-800 hover:bg-zinc-700'
+                    'h-2 flex-1 rounded-full transition-colors',
+                    i === index ? 'bg-blue-500' : stepDone(s) ? 'bg-volt' : 'bg-zinc-800 hover:bg-zinc-700'
                   )}
                 />
               ))}
@@ -367,10 +368,14 @@ export function GuidedWorkout({
           )}
 
           {finished ? (
-            <div className="rounded-2xl border border-green-600/40 bg-green-600/10 p-6 text-center space-y-3">
-              <PartyPopper className="w-10 h-10 text-green-400 mx-auto" />
-              <h2 className="text-xl font-bold text-white">
-                {doneEx === totalEx ? 'Workout complete!' : 'Nice work!'}
+            <div className="relative overflow-hidden rounded-3xl border border-line p-6 pt-10 text-center space-y-4">
+              <VideoBackground clip="done" overlay="full" />
+              <div className="relative space-y-4">
+              <span className="peac-pop mx-auto flex w-20 h-20 items-center justify-center rounded-full bg-volt">
+                <PartyPopper className="w-10 h-10 text-ink" />
+              </span>
+              <h2 className="font-display italic font-extrabold uppercase text-5xl leading-[0.9] text-white">
+                {doneEx === totalEx ? <>Workout<br />done.</> : 'Nice work.'}
               </h2>
               <p className="text-sm text-zinc-300">
                 {doneEx} of {totalEx} exercises done.
@@ -378,8 +383,9 @@ export function GuidedWorkout({
               </p>
               <SessionRpe athleteId={athleteId} workoutId={workoutId} initial={session} />
               <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
-                <button onClick={() => go(index)} className="px-4 py-2.5 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200">Back to workout</button>
-                <Link href={backHref} className="px-4 py-2.5 rounded-lg bg-green-600 text-sm font-medium text-white">Done — go home</Link>
+                <button onClick={() => go(index)} className="h-14 px-5 rounded-2xl bg-zinc-800 border border-zinc-700 text-sm font-semibold text-zinc-200">Back to workout</button>
+                <Link href={backHref} className="flex h-14 items-center justify-center px-6 rounded-2xl bg-volt font-display text-xl font-extrabold uppercase tracking-wider text-ink">Done · go home</Link>
+              </div>
               </div>
             </div>
           ) : (
@@ -410,16 +416,16 @@ export function GuidedWorkout({
           <button
             onClick={() => go(index - 1)}
             disabled={index === 0}
-            className="flex items-center justify-center gap-1 px-4 py-3.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm font-medium text-zinc-300 disabled:opacity-30"
+            className="flex items-center justify-center gap-1 px-4 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 text-sm font-semibold text-zinc-300 disabled:opacity-30"
           >
             <ChevronLeft className="w-5 h-5" /> Back
           </button>
           <button
             onClick={() => (isLast ? (getVoiceSettings().enabled ? finishByVoice() : setFinished(true)) : go(index + 1))}
             className={cn(
-              'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-semibold min-w-0',
+              'flex items-center justify-center gap-2 px-4 h-14 rounded-2xl font-display text-lg font-extrabold uppercase tracking-wide min-w-0',
               isLast
-                ? 'bg-green-600 text-white hover:bg-green-700'
+                ? 'bg-volt text-ink hover:brightness-110'
                 : step && (step.kind === 'warmup' || stepDone(step))
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-zinc-800 border border-zinc-700 text-white hover:border-zinc-500'

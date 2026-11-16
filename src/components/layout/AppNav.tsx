@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { LogOut, MoreHorizontal, X, Zap, type LucideIcon } from 'lucide-react'
+import { LogOut, MoreHorizontal, X, type LucideIcon } from 'lucide-react'
+import { PeacLogo } from '@/components/brand/PeacLogo'
 import { cn } from '@/lib/utils'
 import { signOut } from '@/app/actions/auth'
 
@@ -16,18 +17,17 @@ export type NavItem = { href: string; icon: LucideIcon; label: string; short?: s
 export interface NavBrand { name: string | null; logoUrl: string | null }
 
 function Logo({ brand, size }: { brand?: NavBrand | null; size: 'sm' | 'lg' }) {
-  const box = size === 'lg' ? 'h-8 max-w-[7rem]' : 'h-7 max-w-[6rem]'
-  return (
-    <div className="flex items-center gap-2.5 min-w-0">
-      {brand?.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
+  if (brand?.logoUrl) {
+    const box = size === 'lg' ? 'h-11 max-w-[8rem]' : 'h-9 max-w-[7rem]'
+    return (
+      <div className="flex items-center gap-3 min-w-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={brand.logoUrl} alt="" className={`${box} w-auto object-contain`} />
-      ) : (
-        <Zap className={size === 'lg' ? 'w-6 h-6 text-blue-500 fill-blue-500' : 'w-5 h-5 text-blue-500 fill-blue-500'} />
-      )}
-      <span className={`${size === 'lg' ? 'text-lg' : 'text-base'} font-bold tracking-tight truncate`}>{brand?.name || 'PEAC'}</span>
-    </div>
-  )
+        <span className={`font-display font-extrabold uppercase tracking-wide truncate ${size === 'lg' ? 'text-3xl' : 'text-2xl'}`}>{brand.name || 'PEAC'}</span>
+      </div>
+    )
+  }
+  return <PeacLogo size={size === 'lg' ? 'lg' : 'md'} name={brand?.name} />
 }
 
 export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: string[]; brand?: NavBrand | null }) {
@@ -46,7 +46,7 @@ export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: 
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col fixed inset-y-0 left-0 w-60 bg-zinc-950 border-r border-zinc-800 z-40">
-        <div className="flex items-center px-6 h-16 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center px-5 h-20 border-b border-zinc-800 shrink-0">
           <Logo brand={brand} size="lg" />
         </div>
 
@@ -56,7 +56,7 @@ export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: 
               key={href}
               href={href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors',
                 isActive(href) ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/80'
               )}
             >
@@ -81,7 +81,7 @@ export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: 
       </aside>
 
       {/* Phone: top bar */}
-      <header className="mobile-header md:hidden fixed top-0 inset-x-0 bg-zinc-950/95 backdrop-blur border-b border-zinc-800 z-40 flex items-center px-4">
+      <header className="mobile-header md:hidden fixed top-0 inset-x-0 bg-ink/95 backdrop-blur border-b border-zinc-800/80 z-40 flex items-center px-4">
         <Logo brand={brand} size="sm" />
       </header>
 
@@ -126,7 +126,7 @@ export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: 
       )}
 
       {/* Phone: bottom tab bar */}
-      <nav className="tabbar md:hidden fixed bottom-0 inset-x-0 z-50 bg-zinc-950/95 backdrop-blur border-t border-zinc-800">
+      <nav className="tabbar md:hidden fixed bottom-0 inset-x-0 z-50 bg-ink/95 backdrop-blur border-t border-zinc-800">
         <div className="grid grid-cols-5 h-16">
           {tabItems.map(({ href, icon: Icon, label, short }) => {
             const active = isActive(href) && !moreOpen
@@ -135,7 +135,7 @@ export function AppNav({ items, tabs, brand = null }: { items: NavItem[]; tabs: 
                 key={href}
                 href={href}
                 className={cn(
-                  'flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors',
+                  'flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors',
                   active ? 'text-blue-400' : 'text-zinc-500 active:text-zinc-300'
                 )}
               >

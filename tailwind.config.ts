@@ -10,9 +10,15 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['"Barlow Condensed"', 'Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
         peac: '#2563eb',
+        volt: '#C6FF3D',
+        ink: '#07080A',
+        panel: '#111318',
+        panel2: '#181B22',
+        line: '#232731',
       },
     },
   },

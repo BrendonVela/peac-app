@@ -1,3 +1,4 @@
+import { VideoBackground } from '@/components/brand/VideoBackground'
 import Link from 'next/link'
 import { coachMatch } from '@/lib/acting'
 import { createClient } from '@/lib/supabase/server'
@@ -113,23 +114,39 @@ export default async function CoachDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Welcome back, {coach.name.split(' ')[0]}</h1>
-        <p className="text-zinc-400 text-sm mt-0.5">
-          {formatShortDate(today)} · Week of {formatMonthDay(weekStart)} – {formatMonthDay(weekEnd)}
-        </p>
-      </div>
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl min-h-[200px] flex items-end">
+        <VideoBackground clip="coach" overlay="left" />
+        <div className="relative w-full p-6 sm:p-8 flex flex-wrap items-end gap-5">
+          <div className="flex-1 min-w-[16rem]">
+            <p className="text-sm font-medium text-zinc-300">
+              {formatShortDate(today)} · Week of {formatMonthDay(weekStart)} – {formatMonthDay(weekEnd)}
+            </p>
+            <h1 className="mt-1 italic text-4xl sm:text-5xl leading-[0.95]">Welcome back, Coach {coach.name.split(' ')[0]}</h1>
+            <p className="mt-2 text-sm text-zinc-300">
+              {rows.length} {rows.length === 1 ? 'athlete' : 'athletes'}
+              {attentionCount > 0 ? ` · ${attentionCount} need a look` : ' · everyone is on track'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/coach/programs" className="flex h-12 items-center rounded-2xl bg-blue-500 px-5 text-sm font-bold text-ink hover:brightness-110">Assign program</Link>
+            <Link href="/coach/messages" className="flex h-12 items-center rounded-2xl border border-zinc-700 bg-panel2/90 px-5 text-sm font-semibold text-white hover:border-zinc-500">Message team</Link>
+          </div>
+        </div>
+      </section>
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {stats.map(({ label, value, icon: Icon, tone }) => (
           <Card key={label}>
-            <CardContent className="py-4">
-              <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center mb-3', tone)}>
-                <Icon className="w-4 h-4" />
+            <CardContent className="py-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">{label}</p>
+                <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', tone)}>
+                  <Icon className="w-4 h-4" />
+                </div>
               </div>
-              <p className="text-2xl font-bold text-white">{value}</p>
-              <p className="text-xs text-zinc-500 mt-0.5">{label}</p>
+              <p className="mt-2 font-display text-5xl font-extrabold leading-none text-white">{value}</p>
             </CardContent>
           </Card>
         ))}
