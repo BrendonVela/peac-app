@@ -295,7 +295,7 @@ export function GuidedWorkout({
   return (
     <div className="space-y-4">
       {/* Mode switch */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
           <button
             onClick={() => changeMode('guided')}

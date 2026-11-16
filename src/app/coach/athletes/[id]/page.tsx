@@ -96,7 +96,7 @@ export default async function AthleteDetailPage({
         </Link>
         <div>
           <h1 className="text-2xl font-bold">{athlete.name}</h1>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             {athlete.sport && <Badge variant="blue">{athlete.sport}</Badge>}
             {athlete.position && <Badge>{athlete.position}</Badge>}
             {athlete.graduation_year && (
@@ -257,10 +257,10 @@ export default async function AthleteDetailPage({
           {checkIns && checkIns.length > 0 ? (
             <div className="divide-y divide-zinc-800">
               {checkIns.map(ci => (
-                <div key={ci.id} className="flex items-center justify-between px-5 py-3.5">
+                <div key={ci.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                   <div>
                     <p className="text-sm text-zinc-400">{formatDate(ci.date)}</p>
-                    <div className="flex gap-3 mt-1 text-xs text-zinc-500">
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-zinc-500">
                       <span>Sleep {ci.sleep_quality}</span>
                       <span>Energy {ci.energy}</span>
                       <span>Stress {ci.stress}</span>

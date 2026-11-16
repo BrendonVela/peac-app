@@ -142,3 +142,13 @@ body:has(.rest-timer) .voice-coach { bottom: calc(env(safe-area-inset-bottom) + 
 @media (max-width: 767px) {
   body:has(.rest-timer) .voice-coach { bottom: calc(env(safe-area-inset-bottom) + 14.5rem) !important; }
 }
+
+/* ---------- Fit every screen: scroll down only, never sideways ---------- */
+html, body { max-width: 100%; overflow-x: hidden; }
+@supports (overflow-x: clip) {
+  html, body { overflow-x: clip; }
+}
+.mobile-main { min-width: 0; overflow-wrap: anywhere; }
+/* Grid boxes may shrink to fit instead of pushing the page wider */
+.mobile-main :where(.grid) > * { min-width: 0; }
+.mobile-main :where(img, iframe, video, select, input, textarea) { max-width: 100%; }
