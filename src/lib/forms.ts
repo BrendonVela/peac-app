@@ -22,7 +22,11 @@ export interface FormRow {
   group_id: string | null
   active: boolean
   created_at: string
+  public_slug?: string | null
+  show_athletes?: boolean
 }
+
+export const publicFormUrl = (slug: string) => `https://peac-app.vercel.app/f/${slug}`
 
 export const FREQ_LABEL: Record<FormRow['frequency'], string> = {
   once: 'One time',

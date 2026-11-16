@@ -25,6 +25,8 @@ export async function saveForm(form: {
   questions: Question[]
   group_id: string | null
   active: boolean
+  isPublic?: boolean
+  showAthletes?: boolean
 }) {
   const supabase = createClient()
   const coachId = await getActingCoachId()
@@ -43,6 +45,14 @@ export async function saveForm(form: {
     questions,
     group_id: form.group_id || null,
     active: form.active,
+    show_athletes: form.showAthletes ?? true,
+    public_slug: null as string | null,
+  }
+  // Public link: keep the same link once made, so shared links keep working
+  if (form.isPublic) {
+    const existing = form.id ? (await supabase.from('forms').select('public_slug').eq('id', form.id).maybeSingle()).data?.public_slug : null
+    const base = row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'form'
+    row.public_slug = existing || `${base}-${Math.random().toString(36).slice(2, 8)}`
   }
   const res = form.id
     ? await supabase.from('forms').update(row).eq('id', form.id).select('id').single()

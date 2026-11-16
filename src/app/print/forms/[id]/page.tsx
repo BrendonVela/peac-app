@@ -7,7 +7,7 @@ import { PrintBar } from './PrintBar'
 export const dynamic = 'force-dynamic'
 
 /** Printable copy of form responses. Opens the print window so the coach can "Save as PDF". */
-export default async function PrintFormResponses({ params, searchParams }: { params: { id: string }; searchParams: { r?: string } }) {
+export default async function PrintFormResponses({ params, searchParams }: { params: { id: string }; searchParams: { r?: string; l?: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -17,14 +17,22 @@ export default async function PrintFormResponses({ params, searchParams }: { par
   const f = form as FormRow
 
   let q = supabase.from('form_responses').select('id, athlete_id, period, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(500)
+  let lq = supabase.from('form_leads').select('id, name, email, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(500)
   if (searchParams.r) q = q.eq('id', searchParams.r)
-  const [{ data: responses }, { data: athletes }] = await Promise.all([
-    q,
+  if (searchParams.l) lq = lq.eq('id', searchParams.l)
+  const [{ data: responses }, { data: athletes }, { data: leads }] = await Promise.all([
+    searchParams.l ? Promise.resolve({ data: [] }) : q,
     supabase.from('athletes').select('id, name').eq('coach_id', coach.id),
+    searchParams.r ? Promise.resolve({ data: [] }) : lq,
   ])
   const nameOf = new Map((athletes ?? []).map((a: { id: string; name: string }) => [a.id, a.name]))
-  const rows = (responses ?? []) as { id: string; athlete_id: string; answers: Record<string, unknown>; submitted_at: string }[]
-  const single = rows.length === 1 ? nameOf.get(rows[0].athlete_id) : null
+  type Entry = { id: string; athlete_id: string; answers: Record<string, unknown>; submitted_at: string; who?: string; email?: string }
+  const rows = [
+    ...((responses ?? []) as Entry[]),
+    ...((leads ?? []) as { id: string; name: string; email: string; answers: Record<string, unknown>; submitted_at: string }[]).map(l => ({ id: l.id, athlete_id: '', answers: l.answers, submitted_at: l.submitted_at, who: l.name, email: l.email })),
+  ].sort((a, b) => b.submitted_at.localeCompare(a.submitted_at)) as Entry[]
+  const nameFor = (r: Entry) => r.who ?? nameOf.get(r.athlete_id) ?? 'Athlete'
+  const single = rows.length === 1 ? nameFor(rows[0]) : null
   const docTitle = `${f.title}${single ? ` - ${single}` : ''}`
 
   return (
@@ -47,7 +55,7 @@ export default async function PrintFormResponses({ params, searchParams }: { par
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">PEAC · {FREQ_LABEL[f.frequency]}</p>
               <h1 className="mt-1 text-2xl font-extrabold">{f.title}</h1>
               <p className="mt-1 text-sm text-zinc-700">
-                <b>{nameOf.get(r.athlete_id) ?? 'Athlete'}</b> · Submitted {new Date(r.submitted_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'medium', timeStyle: 'short' })}
+                <b>{nameFor(r)}</b>{r.email ? ` (${r.email})` : ''} · Submitted {new Date(r.submitted_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'medium', timeStyle: 'short' })}
               </p>
             </header>
             <ol className="space-y-3">

@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { saveForm } from '@/app/actions/forms'
 import { listGroups, type Group } from '@/app/actions/groups'
-import { TYPE_LABEL, FREQ_LABEL, hasOptions, type Question, type QuestionType, type FormRow } from '@/lib/forms'
+import { TYPE_LABEL, FREQ_LABEL, hasOptions, publicFormUrl, type Question, type QuestionType, type FormRow } from '@/lib/forms'
 import type { FormDraft } from '@/lib/formParse'
 import { cn } from '@/lib/utils'
 
@@ -73,6 +73,8 @@ export function FormEditor({ form, trigger, draft, defaultOpen = false, onClosed
   const [frequency, setFrequency] = useState<FormRow['frequency']>(form?.frequency ?? 'once')
   const [groupId, setGroupId] = useState<string>(form?.group_id ?? '')
   const [active, setActive] = useState(form?.active ?? true)
+  const [isPublic, setIsPublic] = useState(!!form?.public_slug)
+  const [showAthletes, setShowAthletes] = useState(form?.show_athletes ?? true)
   const [questions, setQuestions] = useState<Question[]>(
     form?.questions ?? draft?.questions.map(q => ({ ...q, id: newId() })) ?? [{ id: newId(), label: '', type: 'scale', required: true }]
   )
@@ -99,7 +101,7 @@ export function FormEditor({ form, trigger, draft, defaultOpen = false, onClosed
 
   async function save() {
     setBusy(true); setError('')
-    const res = await saveForm({ id: form?.id, title, description, frequency, questions, group_id: groupId || null, active })
+    const res = await saveForm({ id: form?.id, title, description, frequency, questions, group_id: groupId || null, active, isPublic, showAthletes })
     setBusy(false)
     if ('error' in res && res.error) { setError(res.error); return }
     setOpen(false)
@@ -177,9 +179,24 @@ export function FormEditor({ form, trigger, draft, defaultOpen = false, onClosed
             </button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="accent-blue-600" /> Active (athletes can see it)
-          </label>
+          <div className="space-y-2 rounded-lg border border-zinc-800 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Who can fill it out</p>
+            <label className="flex items-start gap-2 text-sm text-zinc-300">
+              <input type="checkbox" checked={showAthletes} onChange={e => setShowAthletes(e.target.checked)} className="mt-0.5 accent-blue-600" />
+              <span>My athletes, inside the app</span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-zinc-300">
+              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="mt-0.5 accent-blue-600" />
+              <span>Anyone with a link, no account needed <span className="block text-xs text-zinc-500">For new clients: put the link on your website, Instagram bio or in a text. They give their name and email.</span></span>
+            </label>
+            {isPublic && form?.public_slug && (
+              <p className="break-all rounded-md bg-zinc-800 px-2 py-1.5 text-xs text-blue-300">{publicFormUrl(form.public_slug)}</p>
+            )}
+            {isPublic && !form?.public_slug && <p className="text-xs text-zinc-500">The link appears after you save.</p>}
+            <label className="flex items-center gap-2 border-t border-zinc-800 pt-2 text-sm text-zinc-300">
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="accent-blue-600" /> Turned on (uncheck to pause the form)
+            </label>
+          </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>

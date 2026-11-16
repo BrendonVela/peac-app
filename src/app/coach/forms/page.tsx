@@ -10,6 +10,7 @@ import { FREQ_LABEL, type FormRow } from '@/lib/forms'
 import { FormEditor } from './FormEditor'
 import { FormRowActions } from './FormRowActions'
 import { ImportForm } from './ImportForm'
+import { CopyLink } from './CopyLink'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,8 +25,9 @@ export default async function CoachFormsPage() {
     supabase.from('forms').select('*').eq('coach_id', coach.id).order('created_at', { ascending: false }),
     supabase.from('form_responses').select('form_id'),
   ])
+  const { data: leads } = await supabase.from('form_leads').select('form_id')
   const countBy = new Map<string, number>()
-  ;(counts ?? []).forEach((r: any) => countBy.set(r.form_id, (countBy.get(r.form_id) ?? 0) + 1))
+  ;[...(counts ?? []), ...(leads ?? [])].forEach((r: any) => countBy.set(r.form_id, (countBy.get(r.form_id) ?? 0) + 1))
   const list = (forms ?? []) as FormRow[]
 
   return (
@@ -58,6 +60,7 @@ export default async function CoachFormsPage() {
                     {FREQ_LABEL[f.frequency]} · {f.questions.length} question{f.questions.length === 1 ? '' : 's'} · {countBy.get(f.id) ?? 0} responses
                   </p>
                 </Link>
+                {f.public_slug && f.active && <CopyLink slug={f.public_slug} />}
                 <Badge variant={f.active ? 'green' : 'default'}>{f.active ? 'Active' : 'Off'}</Badge>
                 <FormRowActions form={f} />
               </CardContent>

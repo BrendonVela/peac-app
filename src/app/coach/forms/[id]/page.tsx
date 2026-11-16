@@ -18,18 +18,23 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
   if (!form || !coach) notFound()
   const f = form as FormRow
 
-  const [{ data: responses }, { data: athletes }] = await Promise.all([
+  const [{ data: responses }, { data: athletes }, { data: leads }] = await Promise.all([
     supabase.from('form_responses').select('id, athlete_id, period, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(1000),
     supabase.from('athletes').select('id, name').eq('coach_id', coach.id).order('name'),
+    supabase.from('form_leads').select('id, name, email, answers, submitted_at').eq('form_id', f.id).order('submitted_at', { ascending: false }).limit(1000),
   ])
   const nameOf = new Map((athletes ?? []).map((a: any) => [a.id, a.name]))
-  const rows = (responses ?? []) as { id: string; athlete_id: string; period: string; answers: Record<string, unknown>; submitted_at: string }[]
-  const answered = new Set(rows.map(r => r.athlete_id))
-  const missing = (athletes ?? []).filter((a: any) => !answered.has(a.id))
+  type Entry = { id: string; athlete_id: string; answers: Record<string, unknown>; submitted_at: string; who?: string; email?: string; lead?: boolean }
+  const athleteRows = (responses ?? []) as Entry[]
+  const answered = new Set(athleteRows.map(r => r.athlete_id))
+  const missing = f.show_athletes === false ? [] : (athletes ?? []).filter((a: any) => !answered.has(a.id))
+  const leadRows: Entry[] = ((leads ?? []) as any[]).map(l => ({ id: l.id, athlete_id: '', answers: l.answers, submitted_at: l.submitted_at, who: l.name, email: l.email, lead: true }))
+  const rows = [...athleteRows, ...leadRows].sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))
+  const nameFor = (r: Entry) => r.who ?? nameOf.get(r.athlete_id) ?? 'Athlete'
 
   const csv = [
-    ['Athlete', 'Submitted', ...f.questions.map(q => q.label)],
-    ...rows.map(r => [nameOf.get(r.athlete_id) ?? 'Athlete', new Date(r.submitted_at).toLocaleString('en-US'), ...f.questions.map(q => formatAnswer(q, r.answers?.[q.id]))]),
+    ['Name', 'Email', 'From', 'Submitted', ...f.questions.map(q => q.label)],
+    ...rows.map(r => [nameFor(r), r.email ?? '', r.lead ? 'Public link' : 'Athlete', new Date(r.submitted_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }), ...f.questions.map(q => formatAnswer(q, r.answers?.[q.id]))]),
   ]
 
   return (
@@ -58,7 +63,7 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
           <table className="w-full min-w-[640px] text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
               <tr>
-                <th className="text-left px-4 py-3">Athlete</th>
+                <th className="text-left px-4 py-3">Name</th>
                 <th className="text-left px-3 py-3">When</th>
                 {f.questions.map(q => <th key={q.id} className="text-left px-3 py-3 max-w-[12rem]">{q.label}</th>)}
               </tr>
@@ -67,8 +72,9 @@ export default async function FormResponsesPage({ params }: { params: { id: stri
               {rows.map((r, i) => (
                 <tr key={i} className="align-top">
                   <td className="px-4 py-2.5 text-white whitespace-nowrap">
-                    {nameOf.get(r.athlete_id) ?? 'Athlete'}
-                    <a href={`/print/forms/${f.id}?r=${r.id}`} className="ml-2 text-xs text-blue-400 hover:text-blue-300">PDF</a>
+                    {nameFor(r)}
+                    <a href={`/print/forms/${f.id}?${r.lead ? 'l' : 'r'}=${r.id}`} className="ml-2 text-xs text-blue-400 hover:text-blue-300">PDF</a>
+                    {r.lead && <span className="block text-[11px] text-zinc-500">{r.email} · public link</span>}
                   </td>
                   <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap">{new Date(r.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                   {f.questions.map(q => {
