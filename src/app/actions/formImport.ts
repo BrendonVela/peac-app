@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { parseFormText, type FormDraft } from '@/lib/formParse'
 import { pdfToLines } from '@/lib/pdfLines'
+import { parseHtmlForm } from '@/lib/htmlForm'
 import type { QuestionType } from '@/lib/forms'
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5'
@@ -30,6 +31,8 @@ function finish(d: FormDraft, name: string): Result {
   const fallback = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Imported form'
   const questions = d.questions
     .filter(q => q.label && TYPES.includes(q.type))
+    // PEAC already knows athletes' names and emails, and the public link asks for them
+    .filter(q => !/^(your |full |first |athlete'?s? )?(name|e-?mail( address)?)$/i.test(q.label.trim()))
     .map(q => ({ ...q, label: q.label.slice(0, 300), options: q.options?.filter(Boolean).slice(0, 40) }))
   if (questions.length === 0) {
     return { error: "Couldn't find any questions in that file. Try copying the questions and using Paste text instead." }
@@ -127,7 +130,7 @@ export async function parseFormFile(formData: FormData): Promise<Result> {
       return finish(parseFormText(text), name)
     }
     // Web page or plain text
-    if (/\.html?$/i.test(name) || type === 'text/html') return finish(parseFormText(htmlToText(buf.toString('utf8'))), name)
+    if (/\.html?$/i.test(name) || type === 'text/html') return fromHtml(buf.toString('utf8'), name)
     if (/\.(txt|md)$/i.test(name) || type.startsWith('text/')) return finish(parseFormText(buf.toString('utf8')), name)
   } catch (e) {
     console.error('[form-import]', e)
@@ -136,8 +139,52 @@ export async function parseFormFile(formData: FormData): Promise<Result> {
   return { error: 'Use a PDF, Word (.docx), Excel/CSV, or text file.' }
 }
 
+/** Web pages: read the real form controls first, fall back to plain text */
+function fromHtml(html: string, name: string): Result {
+  const structured = parseHtmlForm(html)
+  if (structured.questions.length >= 2) return finish(structured, name)
+  const loose = parseFormText(htmlToText(html))
+  return finish(loose.questions.length > structured.questions.length ? loose : structured, name)
+}
+
+function safeUrl(raw: string): URL | null {
+  try {
+    const u = new URL(raw)
+    if (!/^https?:$/.test(u.protocol)) return null
+    const h = u.hostname.toLowerCase()
+    // never reach into private networks
+    if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[)/.test(h) || /^\d+$/.test(h)) return null
+    return u
+  } catch {
+    return null
+  }
+}
+
+async function fromLink(raw: string): Promise<Result> {
+  const url = safeUrl(raw)
+  if (!url) return { error: "That link doesn't look right. It should start with https://" }
+  if (/docs\.google\.com\/forms/.test(url.href)) {
+    return { error: 'Google Forms only show their questions to a browser. Open the form, select all the text (Ctrl+A), copy, and paste it here instead.' }
+  }
+  try {
+    const res = await fetch(url.href, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'user-agent': 'Mozilla/5.0 (PEAC form import)', accept: 'text/html,*/*' },
+    })
+    if (!res.ok) return { error: `That page answered with an error (${res.status}). Check the link.` }
+    const html = (await res.text()).slice(0, 3_000_000)
+    return fromHtml(html, url.hostname)
+  } catch {
+    return { error: "Couldn't open that link. Check it, or copy the page's text and paste it here." }
+  }
+}
+
 export async function parseFormPaste(text: string): Promise<Result> {
   if (!(await signedIn())) return { error: 'Not signed in as a coach' }
-  if (!text.trim()) return { error: 'Paste the questions first.' }
-  return finish(parseFormText(text.slice(0, 50000)), 'Pasted form')
+  const t = text.trim()
+  if (!t) return { error: 'Paste the questions or a link first.' }
+  if (/^https?:\/\/\S+$/i.test(t)) return fromLink(t)
+  if (/<(form|input|label|div|html)[\s>]/i.test(t)) return fromHtml(t.slice(0, 3_000_000), 'Pasted form')
+  return finish(parseFormText(t.slice(0, 50000)), 'Pasted form')
 }

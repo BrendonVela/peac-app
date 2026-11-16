@@ -51,7 +51,7 @@ export function ImportForm() {
         <FileUp className="w-5 h-5 text-blue-400 shrink-0" />
         <div className="flex-1 min-w-[12rem]">
           <p className="text-sm font-semibold text-white">Import a form you already have</p>
-          <p className="text-xs text-zinc-400">Drop a PDF, Word, Excel or text file here. We turn it into questions you can check before saving.</p>
+          <p className="text-xs text-zinc-400">Drop a PDF, Word, Excel or text file here, or paste a link to a web form. We turn it into questions you can check before saving.</p>
         </div>
         <input
           ref={input}
@@ -65,7 +65,7 @@ export function ImportForm() {
             <FileUp className="w-4 h-4" /> {busy ? 'Reading…' : 'Choose file'}
           </button>
           <button onClick={() => setPasteOpen(v => !v)} disabled={busy} className="flex items-center gap-1.5 rounded-xl border border-zinc-700 px-3 py-2 text-sm text-zinc-200 hover:text-white">
-            <ClipboardPaste className="w-4 h-4" /> Paste text
+            <ClipboardPaste className="w-4 h-4" /> Paste text or link
           </button>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function ImportForm() {
             value={paste}
             onChange={e => setPaste(e.target.value)}
             rows={8}
-            placeholder={'Paste the questions here, one per line. For example:\nName:\nAny injuries? Yes / No\nTraining goals (select all that apply)\n• Strength\n• Speed'}
+            placeholder={'Paste a link to a form (https://...), or the questions one per line. For example:\nName:\nAny injuries? Yes / No\nTraining goals (select all that apply)\n• Strength\n• Speed'}
             className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500"
           />
           <button onClick={readPaste} disabled={busy} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
