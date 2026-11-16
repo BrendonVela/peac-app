@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
@@ -10,7 +9,6 @@ import { PeacLogo } from '@/components/brand/PeacLogo'
 import { VideoBackground } from '@/components/brand/VideoBackground'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [deletedNotice, setDeletedNotice] = useState(false)
   useEffect(() => { setDeletedNotice(!!new URLSearchParams(window.location.search).get('deleted')) }, [])
@@ -18,34 +16,47 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
     setError('')
 
     const form = new FormData(e.currentTarget)
-    const email = form.get('email') as string
-    const password = form.get('password') as string
+    // Phones often add a space or a capital letter to emails: clean that up
+    const email = String(form.get('email') ?? '').trim().toLowerCase()
+    const password = String(form.get('password') ?? '')
 
     const supabase = createClient()
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    let result = await supabase.auth.signInWithPassword({ email, password })
+    // A dropped connection (bad gym wifi) shows up as a network error: try once more
+    if (result.error && /fetch|network|timeout|load failed/i.test(result.error.message)) {
+      await new Promise(r => setTimeout(r, 800))
+      result = await supabase.auth.signInWithPassword({ email, password })
+    }
+    const { data, error } = result
 
     if (error) {
-      setError(error.message)
+      setError(
+        /invalid login credentials/i.test(error.message)
+          ? "That email and password don't match. Check for typos, or tap the eye to see your password."
+          : /email not confirmed/i.test(error.message)
+            ? 'Please confirm your email first. Check your inbox for the link.'
+            : /rate limit|too many/i.test(error.message)
+              ? 'Too many tries. Wait a minute, then try again.'
+              : /fetch|network|timeout|load failed/i.test(error.message)
+                ? "Couldn't reach PEAC. Check your connection and try again."
+                : error.message
+      )
       setLoading(false)
       return
     }
 
-    // Return to an invite link (or other page) if one was given
+    // Full page load (not an in-app jump) so the new login is always picked up
     const next = new URL(window.location.href).searchParams.get('next')
-    if (next && next.startsWith('/') && !next.startsWith('//')) {
-      router.push(next)
-      router.refresh()
-      return
-    }
-
     const role = data.user?.user_metadata?.role
-    if (role === 'coach') router.push('/coach/dashboard')
-    else if (role === 'athlete') router.push('/athlete/dashboard')
-    else router.push('/')
+    const dest = next && next.startsWith('/') && !next.startsWith('//')
+      ? next
+      : role === 'coach' ? '/coach/dashboard' : role === 'athlete' ? '/athlete/dashboard' : '/'
+    window.location.assign(dest)
   }
 
   return (
@@ -73,6 +84,10 @@ export default function LoginPage() {
                 placeholder="you@school.edu"
                 required
                 autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
               <Input
                 label="Password"

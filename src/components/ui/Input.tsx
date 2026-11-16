@@ -1,5 +1,8 @@
+'use client'
+
 import { cn } from '@/lib/utils'
-import { InputHTMLAttributes, TextareaHTMLAttributes, forwardRef } from 'react'
+import { InputHTMLAttributes, TextareaHTMLAttributes, forwardRef, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
@@ -7,7 +10,9 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
+  ({ className, label, error, id, type, ...props }, ref) => {
+    const [show, setShow] = useState(false)
+    const isPassword = type === 'password'
     return (
       <div className="space-y-1.5">
         {label && (
@@ -15,16 +20,32 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             {label}
           </label>
         )}
-        <input
-          ref={ref}
-          id={id}
-          className={cn(
-            'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all',
-            error && 'border-red-500 focus:ring-red-500',
-            className
+        <div className="relative">
+          <input
+            ref={ref}
+            id={id}
+            type={isPassword && show ? 'text' : type}
+            className={cn(
+              'w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all',
+              isPassword && 'pr-12',
+              error && 'border-red-500 focus:ring-red-500',
+              className
+            )}
+            {...(isPassword ? { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } : {})}
+            {...props}
+          />
+          {isPassword && (
+            <button
+              type="button"
+              onClick={() => setShow(v => !v)}
+              aria-label={show ? 'Hide password' : 'Show password'}
+              aria-pressed={show}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-zinc-400 hover:text-white"
+            >
+              {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           )}
-          {...props}
-        />
+        </div>
         {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
     )
