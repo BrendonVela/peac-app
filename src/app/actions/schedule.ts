@@ -67,7 +67,10 @@ export async function updateAssignmentPhases(
     .update({ start_date: startDate, start_week: Math.max(1, Math.round(startWeek) || 1), phase_starts: clean })
     .eq('id', assignmentId)
   if (error) {
-    if (/start_week|phase_starts/.test(error.message)) return { error: 'Run the phase_dates SQL in Supabase first (see setup steps).' }
+    console.error('[updateAssignmentPhases]', error)
+    if (/(start_week|phase_starts).*(does not exist|schema cache)|(does not exist|schema cache).*(start_week|phase_starts)/i.test(error.message)) {
+      return { error: 'Run the phase_dates SQL in Supabase first (see setup steps).' }
+    }
     return { error: error.message }
   }
   revalidateSchedulePages(athleteId)
@@ -83,7 +86,10 @@ export async function updateAssignmentVisibility(assignmentId: string, athleteId
     .update({ visibility, visible_weeks: Math.max(1, Math.round(visibleWeeks) || 1) })
     .eq('id', assignmentId)
   if (error) {
-    if (/visibility|visible_weeks/.test(error.message)) return { error: 'Run the program_visibility SQL in Supabase first (see setup steps).' }
+    console.error('[updateAssignmentVisibility]', error)
+    if (/(visibility|visible_weeks).*(does not exist|schema cache)|(does not exist|schema cache).*(visibility|visible_weeks)/i.test(error.message)) {
+      return { error: 'Run the program_visibility SQL in Supabase first (see setup steps).' }
+    }
     return { error: error.message }
   }
   revalidateSchedulePages(athleteId)
