@@ -148,7 +148,7 @@ export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }:
       <button
         onClick={() => viewAs(kind, id)}
         disabled={busy === `view-${id}`}
-        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
+        className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 text-sm font-medium text-amber-300 hover:bg-amber-500/20"
         title={`Open the app as this ${kind}`}
       >
         <Eye className="w-3.5 h-3.5" /> {busy === `view-${id}` ? 'Opening…' : 'View as'}
@@ -313,15 +313,16 @@ export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }:
             {coaches.map(c => {
               const isMe = c.id === myCoachId
               return (
-                <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                  <div className="min-w-0 flex-1">
+                <div key={c.id} className="space-y-3 px-5 py-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-white flex items-center gap-2">
                       {c.name}
                       {c.is_admin && <Badge variant="purple"><ShieldCheck className="w-3 h-3 mr-1" />Admin</Badge>}
                       {isMe && <span className="text-xs text-zinc-500">(you)</span>}
                     </p>
-                    <p className="text-xs text-zinc-500 truncate">
-                      {c.email ?? 'No login'} · {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · Last sign-in {fmt(c.last_sign_in_at)}
+                    <p className="text-xs text-zinc-400 break-all">{c.email ?? 'No login'}</p>
+                    <p className="text-xs text-zinc-500">
+                      {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · Last sign-in {fmt(c.last_sign_in_at)}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
                       <span className="text-zinc-500">Athlete code:</span>
@@ -361,27 +362,27 @@ export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }:
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     {!isMe && <ViewAsButton kind="coach" id={c.id} />}
                     <button
                       onClick={() => run(`admin-${c.id}`, () => setAdmin(c.id, !c.is_admin), c.is_admin ? 'Admin removed' : 'Made admin')}
                       disabled={busy === `admin-${c.id}`}
-                      className="text-xs px-2.5 py-1.5 rounded-md border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500"
+                      className="h-10 shrink-0 whitespace-nowrap rounded-lg border border-zinc-700 px-3 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white"
                     >
                       {c.is_admin ? 'Remove admin' : 'Make admin'}
                     </button>
                     {c.user_id && (
-                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: c }) }} className="text-zinc-500 hover:text-white p-1.5" title="Set password">
+                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: c }) }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-white" title="Set password">
                         <Lock className="w-4 h-4" />
                       </button>
                     )}
                     {c.email && (
-                      <button onClick={() => sendReset(c)} className="text-zinc-500 hover:text-white p-1.5" title="Send password reset">
+                      <button onClick={() => sendReset(c)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-white" title="Send password reset">
                         <KeyRound className="w-4 h-4" />
                       </button>
                     )}
                     {!isMe && (
-                      <button onClick={() => openDialog({ type: 'deleteCoach', p: c })} className="text-zinc-500 hover:text-red-400 p-1.5" title="Delete coach">
+                      <button onClick={() => openDialog({ type: 'deleteCoach', p: c })} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-red-400" title="Delete coach">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
@@ -413,8 +414,8 @@ export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }:
           ) : (
             <div className="divide-y divide-zinc-800">
               {filteredAthletes.map(a => (
-                <div key={a.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                  <div className="min-w-0 flex-1">
+                <div key={a.id} className="space-y-3 px-5 py-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-white flex items-center gap-2">
                       {a.coach_id === myCoachId ? (
                         <Link href={`/coach/athletes/${a.id}`} className="hover:text-blue-300 flex items-center gap-1">
@@ -423,36 +424,36 @@ export function AdminPanel({ people, invites, myCoachId, coachCode, joinCodes }:
                       ) : a.name}
                       {!a.coach_id && <Badge variant="yellow">Unassigned</Badge>}
                     </p>
-                    <p className="text-xs text-zinc-500 truncate">
-                      {a.email ?? 'No login (added by coach)'} · Last sign-in {fmt(a.last_sign_in_at)}
-                    </p>
+                    <p className="text-xs text-zinc-400 break-all">{a.email ?? 'No login (added by coach)'}</p>
+                    <p className="text-xs text-zinc-500">Last sign-in {fmt(a.last_sign_in_at)}</p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <ViewAsButton kind="athlete" id={a.id} />
                     <select
                       value={a.coach_id ?? ''}
                       onChange={e => run(`move-${a.id}`, () => moveAthlete(a.id, e.target.value || null), 'Athlete moved')}
                       disabled={busy === `move-${a.id}`}
-                      className={selectCls}
+                      className={`${selectCls} h-10 min-w-0 flex-1 basis-40 text-sm sm:flex-none sm:basis-auto`}
                       title="Coach"
+                      aria-label={`Coach for ${a.name}`}
                     >
                       <option value="">No coach</option>
                       {coaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <button onClick={() => openDialog({ type: 'reset', p: a })} className="text-zinc-500 hover:text-amber-400 p-1.5" title="Reset training data">
+                    <button onClick={() => openDialog({ type: 'reset', p: a })} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-amber-400" title="Reset training data">
                       <RotateCcw className="w-4 h-4" />
                     </button>
                     {a.user_id && (
-                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: a }) }} className="text-zinc-500 hover:text-white p-1.5" title="Set password">
+                      <button onClick={() => { setNewPw(''); setShowPw(false); openDialog({ type: 'password', p: a }) }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-white" title="Set password">
                         <Lock className="w-4 h-4" />
                       </button>
                     )}
                     {a.email && (
-                      <button onClick={() => sendReset(a)} className="text-zinc-500 hover:text-white p-1.5" title="Send password reset">
+                      <button onClick={() => sendReset(a)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-white" title="Send password reset">
                         <KeyRound className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => openDialog({ type: 'deleteAthlete', p: a })} className="text-zinc-500 hover:text-red-400 p-1.5" title="Delete athlete">
+                    <button onClick={() => openDialog({ type: 'deleteAthlete', p: a })} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:text-red-400" title="Delete athlete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
