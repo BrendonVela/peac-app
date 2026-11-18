@@ -20,13 +20,19 @@ export function ExportCsvButton({ rows, filename }: { rows: (string | number)[][
   )
 }
 
-export function ExportExcelButton({ rows, filename, sheet }: { rows: (string | number)[][]; filename: string; sheet: string }) {
+export function ExportExcelButton({ rows, list, filename }: { rows: (string | number)[][]; list: (string | number)[][]; filename: string }) {
   async function go() {
     const XLSX = await import('xlsx')
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = rows[0]?.map((_, i) => ({ wch: Math.min(40, Math.max(12, ...rows.map(r => String(r[i] ?? '').length))) }))
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, sheet.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Responses')
+    // Sheet 1: one line per answer (easy to read and filter)
+    const ws1 = XLSX.utils.aoa_to_sheet(list)
+    ws1['!cols'] = [{ wch: 22 }, { wch: 26 }, { wch: 20 }, { wch: 4 }, { wch: 50 }, { wch: 50 }]
+    ws1['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, list.length - 1), c: 5 } }) }
+    XLSX.utils.book_append_sheet(wb, ws1, 'Answers')
+    // Sheet 2: one row per person, one column per question (for sorting / comparing)
+    const ws2 = XLSX.utils.aoa_to_sheet(rows)
+    ws2['!cols'] = rows[0]?.map((_, i) => ({ wch: i < 4 ? 22 : Math.min(36, Math.max(14, ...rows.slice(1).map(r => String(r[i] ?? '').length))) }))
+    XLSX.utils.book_append_sheet(wb, ws2, 'Table')
     XLSX.writeFile(wb, filename)
   }
   return (

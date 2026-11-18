@@ -149,6 +149,8 @@ html, body { max-width: 100%; overflow-x: hidden; }
   html, body { overflow-x: clip; }
 }
 .mobile-main { min-width: 0; overflow-wrap: anywhere; }
+/* Tables keep whole words (they scroll inside their own box instead) */
+.mobile-main table { overflow-wrap: normal; }
 /* Grid boxes may shrink to fit instead of pushing the page wider */
 .mobile-main :where(.grid) > * { min-width: 0; }
 .mobile-main :where(img, iframe, video, select, input, textarea) { max-width: 100%; }
