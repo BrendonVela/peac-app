@@ -6,7 +6,7 @@ import { coachMatch } from '@/lib/acting'
 import { Card, CardContent } from '@/components/ui/Card'
 import { FREQ_LABEL, formatAnswer, type FormRow } from '@/lib/forms'
 import { ExportCsvButton, ExportExcelButton } from './ExportCsvButton'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,7 +105,7 @@ export default async function FormResponsesPage({ params, searchParams }: { para
           {rows.map((r, i) => (
             <details key={r.id} open={i === 0} className="group rounded-2xl border border-line bg-panel">
               <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-panel2 text-xs font-bold">{nameFor(r).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-panel2 text-xs font-bold">{initials(nameFor(r))}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold text-white">{nameFor(r)}</span>
                   <span className="block text-xs text-zinc-500">{fmtDate(r.submitted_at)}{r.lead ? ` · ${r.email} · public link` : ''}</span>

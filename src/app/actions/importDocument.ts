@@ -161,6 +161,10 @@ export async function importProgramFromDocument(formData: FormData): Promise<{ i
   if (weeks.length === 0) return { error: 'No workouts found in that file. Try a clearer photo or a PDF.' }
 
   const base = (program.title || file.name.replace(/\.[^.]+$/, '')).trim()
-  const id = await importWeeks(supabase, coach.id, weeks, base, `Imported from ${isPdf ? 'PDF' : 'photo'} — check it over`)
-  return { id }
+  try {
+    const id = await importWeeks(supabase, coach.id, weeks, base, `Imported from ${isPdf ? 'PDF' : 'photo'} — check it over`)
+    return { id }
+  } catch (e) {
+    return { error: (e as Error).message }
+  }
 }

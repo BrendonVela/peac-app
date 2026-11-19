@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { Users, CheckCircle2, AlertTriangle, Heart, ChevronRight, BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { getReadinessBadge, getReadinessLabel, cn } from '@/lib/utils'
+import { getReadinessBadge, getReadinessLabel, cn, initials } from '@/lib/utils'
 import {
   getTeamSchedules, todayISO, startOfWeek, addDays,
   formatMonthDay, formatWeekday, formatShortDate,
@@ -189,7 +189,7 @@ export default async function CoachDashboard() {
                       {/* Athlete */}
                       <div className="col-span-2 md:col-span-1 flex items-center gap-3 min-w-0">
                         <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-400 font-semibold text-xs shrink-0">
-                          {r.name.slice(0, 2).toUpperCase()}
+                          {initials(r.name)}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white truncate">{r.name}</p>

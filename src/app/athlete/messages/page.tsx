@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { sendMessage, markMessagesRead } from '@/app/actions/messages'
 import { MessageAttachment } from '@/components/MessageAttachment'
 import { VideoSendButton } from '@/components/VideoSendButton'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 import type { Message } from '@/types'
 
 interface Contact {
@@ -129,7 +129,7 @@ export default function AthleteMessagesPage() {
                 </div>
               ) : (
                 <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-400 text-xs font-semibold">
-                  {selected.name.slice(0, 2).toUpperCase()}
+                  {initials(selected.name)}
                 </div>
               )}
               <div>

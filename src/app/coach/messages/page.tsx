@@ -9,7 +9,7 @@ import { sendMessage, markMessagesRead, broadcastMessage, adminDeleteMessage, ad
 import { Modal } from '@/components/ui/Modal'
 import { MessageAttachment } from '@/components/MessageAttachment'
 import { VideoSendButton } from '@/components/VideoSendButton'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 import type { Message } from '@/types'
 
 type Kind = 'admin' | 'coach' | 'athlete'
@@ -445,7 +445,7 @@ function Avatar({ thread }: { thread: Thread }) {
         thread.kind === 'coach' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-blue-600/20 text-blue-400'
       )}
     >
-      {thread.name.slice(0, 2).toUpperCase()}
+      {initials(thread.name)}
     </div>
   )
 }

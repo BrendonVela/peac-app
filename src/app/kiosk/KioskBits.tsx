@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { LogOut, Search } from 'lucide-react'
 import { GroupsBar } from '@/components/groups/GroupsBar'
 import type { Group } from '@/app/actions/groups'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 
 /** Press and hold for 2 seconds to leave the tablet mode (stops athletes wandering into the coach account) */
 export function HoldToExit() {
@@ -88,7 +88,7 @@ export function AthleteTiles({ athletes }: { athletes: { id: string; name: strin
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 active:scale-[0.98] transition-transform hover:border-blue-600/50"
           >
             <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-300 font-bold mb-3">
-              {a.name.slice(0, 2).toUpperCase()}
+              {initials(a.name)}
             </div>
             <p className="text-lg font-semibold text-white leading-tight">{a.name}</p>
             <p className={cn('text-sm mt-1', a.today ? 'text-green-400' : 'text-zinc-500')}>

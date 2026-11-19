@@ -16,6 +16,7 @@ import { InviteCard } from './InviteCard'
 import { getActingCoachId } from '@/app/actions/viewAs'
 import { GroupsBar } from '@/components/groups/GroupsBar'
 import type { Group } from '@/app/actions/groups'
+import { initials } from '@/lib/utils'
 
 export default function AthletesPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -201,7 +202,7 @@ async function handleUnclaim(athleteId: string) {
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-blue-600/20 border border-blue-600/30 flex items-center justify-center text-blue-400 font-semibold text-sm shrink-0">
-                      {athlete.name.slice(0, 2).toUpperCase()}
+                      {initials(athlete.name)}
                     </div>
                     <div>
                       <p className="font-medium text-white flex flex-wrap items-center gap-2">

@@ -113,8 +113,10 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
 
   let workoutCount = 0
   let exerciseInstanceCount = 0
+  let firstError: string | null = null
 
   for (const week of weeks) {
+    if (week.days.length === 0) continue // nothing to save for this week
     const { data: block, error: blockError } = await supabase
       .from('training_blocks')
       .insert({
@@ -126,7 +128,11 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
       .select('id')
       .single()
 
-    if (blockError || !block) continue
+    if (blockError || !block) {
+      firstError ??= `week ${week.absoluteWeek}: ${blockError?.message}`
+      console.error(`[import] week ${week.absoluteWeek} failed: ${blockError?.message}`)
+      continue
+    }
 
     for (let dayIdx = 0; dayIdx < week.days.length; dayIdx++) {
       const day = week.days[dayIdx]
@@ -135,7 +141,7 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
         .insert({
           program_id: program.id,
           block_id: block.id,
-          title: day.title,
+          title: (day.title || '').trim() || `Day ${dayIdx + 1}`,
           day_of_week: dayIdx + 1,
           notes: null,
           warmup: day.warmup,
@@ -145,6 +151,7 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
 
       if (workoutError || !workout) {
         console.error(`[import] workout "${day.title}" failed: ${workoutError?.message}`)
+        firstError ??= `"${day.title}": ${workoutError?.message}`
         continue
       }
       workoutCount++
@@ -180,13 +187,24 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
 
       if (exerciseRows.length > 0) {
         const { error: wxError } = await supabase.from('workout_exercises').insert(exerciseRows)
-        if (wxError) console.error(`[import] exercises for "${day.title}" failed: ${wxError.message}`)
+        if (wxError) {
+          console.error(`[import] exercises for "${day.title}" failed: ${wxError.message}`)
+          firstError ??= `exercises for "${day.title}": ${wxError.message}`
+        }
         exerciseInstanceCount += exerciseRows.length
       }
     }
   }
 
   console.log(`[import] Created ${workoutCount} workouts, ${exerciseInstanceCount} exercise entries`)
+
+  // Never leave an empty program behind: it looks assigned but shows nothing to the athlete
+  if (workoutCount === 0) {
+    await supabase.from('programs').delete().eq('id', program.id)
+    throw new Error(firstError
+      ? `No workouts could be saved (${firstError}).`
+      : 'No workouts were found in that file. Check that each day has exercises listed.')
+  }
 
   revalidatePath('/coach/programs')
   revalidatePath('/coach/exercises')
