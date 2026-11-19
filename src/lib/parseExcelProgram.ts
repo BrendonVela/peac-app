@@ -119,7 +119,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       }
 
       if (typeof firstTrimmed === 'string' && DAY_HEADER.test(firstTrimmed)) {
-        currentDay = { title: firstTrimmed, warmup: null, exercises: [] }
+        currentDay = { title: firstTrimmed.replace(/\s+/g, ' '), warmup: null, exercises: [] }
         currentSection = null
         rawDays.push(currentDay)
         i++
@@ -151,7 +151,8 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
 
       // Exercise rows are numbered 1, 2, 3… or A1, A2, B1… (French contrast complexes)
       const isExerciseStart =
-        (typeof first === 'number' || (typeof firstTrimmed === 'string' && /^[A-Z]\d{1,2}$/.test(firstTrimmed))) &&
+        // (some files store the number as text, like "1.0" or "3.5")
+        (typeof first === 'number' || (typeof firstTrimmed === 'string' && /^(\d{1,3}(\.\d{1,2})?[a-z]?|[A-Z]\d{1,2}[a-z]?)$/.test(firstTrimmed))) &&
         !!row[1] &&
         typeof row[4] === 'string' && row[4].trim().startsWith('Set')
 
