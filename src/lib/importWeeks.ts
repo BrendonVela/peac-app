@@ -16,9 +16,9 @@ function guessCategory(section: string | null): string {
   return 'Strength'
 }
 
-/** Save parsed weeks as a new program (shared by the Excel and PDF/photo importers). Returns the program id. */
+/** Step 1: match/create every exercise and create the empty program. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function importWeeks(supabase: any, coachId: string, weeks: ParsedWeek[], title: string, description: string): Promise<string> {
+export async function prepareImport(supabase: any, coachId: string, weeks: ParsedWeek[], title: string, description: string): Promise<{ programId: string; nameToId: Record<string, string> }> {
   // Every unique exercise name in the Excel file + its section (for category)
   const nameToSection = new Map<string, string | null>()
   for (const week of weeks) {
@@ -111,6 +111,14 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
     throw new Error(`Failed to create program: ${programError?.message}`)
   }
 
+  return { programId: program.id as string, nameToId: Object.fromEntries(nameToId) }
+}
+
+/** Step 2: save some weeks (blocks, workouts, exercises) into the program. Safe to call in chunks. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function saveWeeks(supabase: any, programId: string, weeks: ParsedWeek[], idMap: Record<string, string>): Promise<{ workouts: number; exercises: number; firstError: string | null }> {
+  const nameToId = new Map(Object.entries(idMap))
+  const program = { id: programId }
   let workoutCount = 0
   let exerciseInstanceCount = 0
   let firstError: string | null = null
@@ -196,17 +204,22 @@ export async function importWeeks(supabase: any, coachId: string, weeks: ParsedW
     }
   }
 
-  console.log(`[import] Created ${workoutCount} workouts, ${exerciseInstanceCount} exercise entries`)
+  return { workouts: workoutCount, exercises: exerciseInstanceCount, firstError }
+}
 
-  // Never leave an empty program behind: it looks assigned but shows nothing to the athlete
-  if (workoutCount === 0) {
-    await supabase.from('programs').delete().eq('id', program.id)
-    throw new Error(firstError
-      ? `No workouts could be saved (${firstError}).`
+/** Both steps at once (PDF/photo importer). Returns the program id. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function importWeeks(supabase: any, coachId: string, weeks: ParsedWeek[], title: string, description: string): Promise<string> {
+  const { programId, nameToId } = await prepareImport(supabase, coachId, weeks, title, description)
+  const res = await saveWeeks(supabase, programId, weeks, nameToId)
+  console.log(`[import] Created ${res.workouts} workouts, ${res.exercises} exercise entries`)
+  if (res.workouts === 0) {
+    await supabase.from('programs').delete().eq('id', programId)
+    throw new Error(res.firstError
+      ? `No workouts could be saved (${res.firstError}).`
       : 'No workouts were found in that file. Check that each day has exercises listed.')
   }
-
   revalidatePath('/coach/programs')
   revalidatePath('/coach/exercises')
-  return program.id as string
+  return programId
 }
