@@ -109,18 +109,25 @@ export async function createProgram(payload: ProgramPayload) {
   redirect(`/coach/programs/${program.id}`)
 }
 
-export async function assignProgram(programId: string, athleteId: string) {
+export async function assignProgram(programId: string, athleteId: string, startDate?: string, startWeek?: number) {
   const supabase = createClient()
-  const { error } = await supabase.from('program_assignments').upsert(
-    {
-      program_id: programId,
-      athlete_id: athleteId,
-      start_date: todayISO(),
-    },
-    { onConflict: 'program_id,athlete_id' }
-  )
+  const date = startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : todayISO()
+  const week = Math.max(1, Math.round(startWeek ?? 1) || 1)
+  const { data: existing } = await supabase.from('program_assignments').select('id').eq('program_id', programId).eq('athlete_id', athleteId).maybeSingle()
+  // Only touch the start fields, so phase dates and visibility settings are kept
+  let { error } = existing
+    ? await supabase.from('program_assignments').update({ start_date: date, start_week: week }).eq('id', existing.id)
+    : await supabase.from('program_assignments').insert({ program_id: programId, athlete_id: athleteId, start_date: date, start_week: week })
+  if (error && /start_week/.test(error.message)) {
+    // Database not updated for "start at week" yet: save the date only
+    ;({ error } = existing
+      ? await supabase.from('program_assignments').update({ start_date: date }).eq('id', existing.id)
+      : await supabase.from('program_assignments').insert({ program_id: programId, athlete_id: athleteId, start_date: date }))
+  }
   if (error) return { error: error.message }
   revalidatePath(`/coach/programs/${programId}`)
+  revalidatePath(`/coach/athletes/${athleteId}`)
+  return { ok: true }
 }
 
 export async function unassignProgram(programId: string, athleteId: string) {

@@ -45,7 +45,7 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
       .eq('program_id', params.id)
       .order('order'),
     supabase.from('athletes').select('id, name, sport').eq('coach_id', coach.id),
-    supabase.from('program_assignments').select('athlete_id').eq('program_id', params.id),
+    supabase.from('program_assignments').select('*').eq('program_id', params.id),
   ])
 
   const assignedIds = new Set(assignments?.map(a => a.athlete_id) ?? [])
@@ -125,8 +125,9 @@ export default async function ProgramDetailPage({ params, searchParams }: { para
         <CardContent>
           <AssignProgramForm
             programId={params.id}
-            athletes={athletes ?? []}
-            assignedIds={Array.from(assignedIds)}
+            athletes={(athletes ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))}
+            assignments={(assignments ?? []).map((a: any) => ({ athleteId: a.athlete_id, startDate: a.start_date, startWeek: a.start_week ?? 1 }))}
+            weeks={Array.from(new Map((blocks ?? []).map((b: any) => [b.week_number as number, String(b.title ?? `Week ${b.week_number}`)])).entries()).sort((a, b) => a[0] - b[0]).map(([n, label]) => ({ n, label }))}
           />
         </CardContent>
       </Card>}
