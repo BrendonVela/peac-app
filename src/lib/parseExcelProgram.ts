@@ -27,7 +27,8 @@ export interface ParsedDay {
 }
 
 /** "DAY 1 — …" or "MON — …" / "Monday - …" starts a new training day */
-const DAY_HEADER = /^(DAY\s*(\d+|[A-Z])\b|(MON|TUES?|WED(NES)?|THU(RS?)?|FRI|SAT(UR)?|SUN)(DAY)?)\b\.?\s*[—–:-]/i
+// "DAY 1 —", "Day A:", "MONDAY -", "DAY 1 (MON) —", "DAY 2 (WEDNESDAY) —", or just "DAY 1"
+const DAY_HEADER = /^(?:(DAY\s*(\d+|[A-Z])\b|(MON|TUES?|WED(NES)?|THU(RS?)?|FRI|SAT(UR)?|SUN)(DAY)?)\b\.?(\s*\([^)]{1,30}\))?\s*([—–:-]|$))/i
 
 /** Numbers in the weight column are pounds: 210 -> "210 lb" */
 function cellText(v: any): string | null {
@@ -73,9 +74,11 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
     refMaxes = { ...lastRefMaxes, ...refMaxes }
     lastRefMaxes = refMaxes
 
+    // Column titles can be in any column and any capitalization ("SET", "Set", "PRESC WT", "Presc. Wt"...)
+    const norm = (v: any) => (typeof v === 'string' ? v.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ') : v)
     let headerRowIdx: number | null = null
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i][4] === 'SET') {
+      if ((rows[i] ?? []).some((c: any) => norm(c) === 'SET')) {
         headerRowIdx = i
         break
       }
@@ -86,12 +89,16 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
     const weekBlocks: { week: number; startCol: number }[] = []
     let localWeekNum = 0
     for (let col = 0; col < header.length; col++) {
-      if (header[col] === 'PRESC WT') {
+      if (/^PRESC(RIBED)? (WT|WEIGHT|LOAD)$/.test(String(norm(header[col]) ?? ''))) {
         localWeekNum++
         weekBlocks.push({ week: localWeekNum, startCol: col })
       }
     }
     if (weekBlocks.length === 0) continue
+    const setCol = Math.max(0, header.findIndex((c: any) => norm(c) === 'SET'))
+    const nameIdx = header.findIndex((c: any) => /^(EXERCISE|EXERCISES|MOVEMENT)$/.test(String(norm(c) ?? '')))
+    const nameCol = nameIdx >= 0 ? nameIdx : 1
+    const isSetLabel = (v: any) => typeof v === 'string' && /^(SET|SETS|RD|ROUND)\s*\d/i.test(v.trim())
 
     type RawExercise = {
       name: string
@@ -153,13 +160,13 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       const isExerciseStart =
         // (some files store the number as text, like "1.0" or "3.5")
         (typeof first === 'number' || (typeof firstTrimmed === 'string' && /^(\d{1,3}(\.\d{1,2})?[a-z]?|[A-Z]\d{1,2}[a-z]?)$/.test(firstTrimmed))) &&
-        !!row[1] &&
-        typeof row[4] === 'string' && row[4].trim().startsWith('Set')
+        !!row[nameCol] &&
+        isSetLabel(row[setCol])
 
       if (isExerciseStart) {
         const exercise: RawExercise = {
           // "FC1a: Back Squat" -> "Back Squat" (the complex is already shown by its section)
-          name: String(row[1]).replace(/^[A-Z]{1,3}\d{1,2}[a-z]?\s*[:.)]\s*/, '').trim() || String(row[1]),
+          name: String(row[nameCol]).replace(/^[A-Z]{1,3}\d{1,2}[a-z]?\s*[:.)]\s*/, '').trim() || String(row[nameCol]),
           section: currentSection,
           coachingNote: null,
           sets: [],
@@ -168,16 +175,17 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
         let j = i
         while (j < rows.length) {
           const r = rows[j]
-          const setLabel = r[4]
-          const isSetRow = typeof setLabel === 'string' && setLabel.trim().startsWith('Set')
-          if (!isSetRow) break
+          const setLabel = r[setCol]
+          if (!isSetLabel(setLabel)) break
           if (j !== i && r[0] !== null) break
 
           const weeksData: Record<number, { prescWt: any; prescReps: any }> = {}
           for (const wb of weekBlocks) {
             const sc = wb.startCol
-            const prescWt = r[sc]
-            const prescReps = r[sc + 1]
+            // "—" or "-" means this set isn't done that week
+            const blank = (v: any) => v === null || v === undefined || (typeof v === 'string' && /^\s*[—–-]?\s*$/.test(v))
+            const prescWt = blank(r[sc]) ? null : r[sc]
+            const prescReps = blank(r[sc + 1]) ? null : r[sc + 1]
             if (prescWt !== null || prescReps !== null) {
               weeksData[wb.week] = { prescWt, prescReps }
             }
