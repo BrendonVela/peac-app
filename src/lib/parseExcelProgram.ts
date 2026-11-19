@@ -253,5 +253,40 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
 
   // Nothing in the usual layout? Try the 'one tab per day, weeks left to right' layout
   if (allWeeks.length === 0) return parseExcelAcross(workbook)
-  return allWeeks
+  return mergeDayTabs(allWeeks)
+}
+
+/**
+ * Some plans put ONE DAY on each tab ("P3 MON LOWER", "P3 TUE PUSH-PULL"...) with the weeks side by side.
+ * Read tab by tab that looks like 4 one-day phases, so put it back together: week 1 = day 1 of every tab, and so on.
+ */
+function mergeDayTabs(weeks: ParsedWeek[]): ParsedWeek[] {
+  const tabs: ParsedWeek[][] = []
+  for (const w of weeks) {
+    const last = tabs[tabs.length - 1]
+    if (last && last[0].phaseTitle === w.phaseTitle) last.push(w)
+    else tabs.push([w])
+  }
+  const n = tabs[0]?.length ?? 0
+  const looksLikeDayTabs =
+    tabs.length >= 2 &&
+    tabs.every(t => t.length === n) &&
+    weeks.every(w => w.days.length <= 1) &&
+    weeks.some(w => w.days.length === 1)
+  if (!looksLikeDayTabs) return weeks
+
+  // Name the block from what the tabs share ("P3 MON LOWER" + "P3 TUE PUSH-PULL" -> "P3")
+  const names = tabs.map(t => t[0].phaseTitle)
+  let prefix = names[0]
+  for (const nm of names) while (prefix && !nm.startsWith(prefix)) prefix = prefix.slice(0, -1)
+  prefix = prefix.replace(/[\s—–:-]+$/, '').trim()
+  const phase = /^P\d+$/i.test(prefix) ? `Phase ${prefix.slice(1)}` : prefix || 'Program'
+
+  return Array.from({ length: n }, (_, i) => ({
+    phaseTitle: phase,
+    refMaxes: tabs[0][i].refMaxes,
+    localWeek: i + 1,
+    absoluteWeek: i + 1,
+    days: tabs.flatMap(t => t[i].days),
+  }))
 }
