@@ -6,6 +6,7 @@ import { ArrowUp, ArrowDown, Trash2, Plus, Copy, Pencil, Flame, Search } from 'l
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/fetchAll'
 import {
   addWorkoutExercise, createLibraryExercise, removeWorkoutExercise, moveWorkoutExercise,
   addWorkoutDay, renameWorkoutDay, deleteWorkoutDay, saveWorkoutWarmup,
@@ -65,7 +66,8 @@ export function AddExerciseButton({ programId, workoutId, section }: { programId
     setOpen(true); setPick(null); setQ('')
     setF({ sets: '3', reps: '', load: '', notes: '', section: section ?? '' })
     if (lib.length === 0) {
-      createClient().from('exercises').select('id, title, category').order('title').then(({ data }) => setLib((data ?? []) as any))
+      const sb = createClient()
+      fetchAll<any>((from, to) => sb.from('exercises').select('id, title, category').order('title').order('id').range(from, to)).then(({ data }) => setLib(data as any))
     }
   }
 

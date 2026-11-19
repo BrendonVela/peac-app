@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Search, Pencil, Trash2, Play, VideoOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/fetchAll'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -47,23 +48,26 @@ export default function ExercisesPage() {
 
   function loadExercises() {
     const supabase = createClient()
-    supabase.from('exercises').select('*').order('title').then(({ data }) => setExercises(data ?? []))
-    supabase.from('exercise_alternatives').select('exercise_id, alternative_id').then(({ data }) => {
+    // The library is bigger than 1,000, so load it in pages (Supabase sends 1,000 at a time)
+    fetchAll<Exercise>((from, to) => supabase.from('exercises').select('*').order('title').order('id').range(from, to)).then(({ data }) => setExercises(data))
+    fetchAll<{ exercise_id: string; alternative_id: string }>((from, to) => supabase.from('exercise_alternatives').select('exercise_id, alternative_id').range(from, to)).then(({ data }) => {
       const m: Record<string, string[]> = {}
-      ;(data ?? []).forEach((r: any) => { (m[r.exercise_id] ??= []).push(r.alternative_id) })
+      ;data.forEach(r => { (m[r.exercise_id] ??= []).push(r.alternative_id) })
       setAlts(m)
     })
   }
 
   useEffect(() => { loadExercises() }, [])
 
-  const noVideoCount = exercises.filter(e => !e.video_url).length
+  const hasVideo = (e: Exercise) => !!e.video_url?.trim()
+  const noVideoCount = exercises.filter(e => !hasVideo(e)).length
+  const videoCount = exercises.length - noVideoCount
 
   const filtered = exercises.filter(e => {
     const matchSearch = e.title.toLowerCase().includes(search.toLowerCase())
     const matchCat =
       category === 'All' ||
-      (category === NO_VIDEO ? !e.video_url : e.category === category)
+      (category === NO_VIDEO ? !hasVideo(e) : e.category === category)
     return matchSearch && matchCat
   })
 
@@ -110,6 +114,7 @@ export default function ExercisesPage() {
           <h1 className="text-2xl font-bold">Exercise Library</h1>
           <p className="text-zinc-400 text-sm mt-0.5">
             {exercises.length} exercises
+            <span className="text-green-400"> · {videoCount} with video</span>
             {noVideoCount > 0 && (
               <span className="text-amber-400"> · {noVideoCount} without video</span>
             )}

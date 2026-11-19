@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { createProgram } from '@/app/actions/programs'
 
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/fetchAll'
 import { DAYS_OF_WEEK, EXERCISE_CATEGORIES } from '@/lib/utils'
 import type { Exercise } from '@/types'
 
@@ -55,8 +56,8 @@ export default function NewProgramPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from('exercises').select('*').order('title').then(({ data }) => {
-      setExercises(data ?? [])
+    fetchAll<any>((from, to) => supabase.from('exercises').select('*').order('title').order('id').range(from, to)).then(({ data }) => {
+      setExercises(data)
     })
   }, [])
 
