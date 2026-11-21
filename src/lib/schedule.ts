@@ -364,10 +364,19 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[], opts
   // Each program's weeks/days once, shared by everyone on it
   const programsById = new Map<string, Row>()
   const programIds = Array.from(new Set(assignments.map(a => a.program_id).filter(Boolean)))
-  for (const part of chunk(programIds, 20)) {
-    const { data } = await supabase.from('programs').select(PROGRAM_TREE).in('id', part)
-    for (const p of (data ?? []) as Row[]) programsById.set(p.id, p)
+  // One program per request: asking for many big programs at once can time out,
+  // and then every athlete on them showed "No program assigned"
+  const loadProgram = async (id: string) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { data, error } = await supabase.from('programs').select(PROGRAM_TREE).eq('id', id).maybeSingle()
+      if (!error) {
+        if (data) programsById.set(data.id, data)
+        return
+      }
+      console.error('Loading program for schedule failed', id, error.message)
+    }
   }
+  for (const part of chunk(programIds, 6)) await Promise.all(part.map(loadProgram))
 
   const group = (rows: Row[]) => {
     const m = new Map<string, Row[]>()
