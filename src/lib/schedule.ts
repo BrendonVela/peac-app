@@ -176,6 +176,8 @@ export interface AthleteSchedule {
   today: string
   assignments: AssignmentInfo[]
   items: ScheduledWorkout[]
+  /** Date (team timezone) of the most recent set/exercise the athlete logged, finished or not */
+  lastLogged: string | null
 }
 
 export const STATUS_LABEL: Record<WorkoutStatus, string> = {
@@ -318,14 +320,16 @@ function buildSchedule(
     })
   }
 
-  return { today, assignments, items }
+  let lastStamp: string | null = null
+  for (const r of results) if (r.logged_at && (!lastStamp || r.logged_at > lastStamp)) lastStamp = r.logged_at
+  return { today, assignments, items, lastLogged: lastStamp ? toLocalISO(lastStamp) : null }
 }
 
 /** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAthleteSchedule(supabase: any, athleteId: string, opts: { athleteView?: boolean } = {}): Promise<AthleteSchedule> {
   const map = await getTeamSchedules(supabase, [athleteId], opts)
-  return map.get(athleteId) ?? { today: todayISO(), assignments: [], items: [] }
+  return map.get(athleteId) ?? { today: todayISO(), assignments: [], items: [], lastLogged: null }
 }
 
 /**

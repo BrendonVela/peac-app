@@ -24,8 +24,12 @@ interface AthleteRow {
   missed: number
   lastWorkout: string | null
   readiness: number | null
+  readinessDate: string | null
   needsAttention: boolean
 }
+
+// Always build this page fresh so new workouts and check-ins show up right away
+export const dynamic = 'force-dynamic'
 
 export default async function CoachDashboard() {
   const supabase = createClient()
@@ -54,13 +58,19 @@ export default async function CoachDashboard() {
 
   const [{ data: checkIns }, schedules] = await Promise.all([
     athleteIds.length > 0
-      ? supabase.from('check_ins').select('athlete_id, readiness_score').eq('date', today).in('athlete_id', athleteIds)
-      : Promise.resolve({ data: [] as { athlete_id: string; readiness_score: number }[] }),
+      ? supabase.from('check_ins').select('athlete_id, date, readiness_score').gte('date', addDays(today, -6)).in('athlete_id', athleteIds).order('date', { ascending: false })
+      : Promise.resolve({ data: [] as { athlete_id: string; date: string; readiness_score: number }[] }),
     getTeamSchedules(supabase, athleteIds).then(m => athleteIds.map(id => m.get(id)!)),
   ])
 
   const readinessById = new Map<string, number>()
-  ;(checkIns ?? []).forEach((c: any) => readinessById.set(c.athlete_id, Number(c.readiness_score)))
+  // Latest check-in in the last 7 days (newest first, so keep the first one we see)
+  const readinessDateById = new Map<string, string>()
+  ;(checkIns ?? []).forEach((c: any) => {
+    if (readinessById.has(c.athlete_id) || c.readiness_score === null || c.readiness_score === undefined) return
+    readinessById.set(c.athlete_id, Number(c.readiness_score))
+    readinessDateById.set(c.athlete_id, c.date)
+  })
 
   const recent: { athleteId: string; athleteName: string; item: ScheduledWorkout }[] = []
 
@@ -71,8 +81,10 @@ export default async function CoachDashboard() {
     const missed = sched.items.filter(i => i.status === 'missed').length
     const doneItems = sched.items.filter(i => i.status === 'done' && i.completedDate)
     doneItems.forEach(item => recent.push({ athleteId: a.id, athleteName: a.name, item }))
-    const lastWorkout = doneItems.map(i => i.completedDate as string).sort().pop() ?? null
+    // Last time they trained: a finished workout or anything they logged, whichever is newer
+    const lastWorkout = [...doneItems.map(i => i.completedDate as string), sched.lastLogged ?? ''].filter(Boolean).sort().pop() ?? null
     const readiness = readinessById.has(a.id) ? readinessById.get(a.id)! : null
+    const readinessDate = readinessDateById.get(a.id) ?? null
 
     return {
       id: a.id,
@@ -85,7 +97,8 @@ export default async function CoachDashboard() {
       missed,
       lastWorkout,
       readiness,
-      needsAttention: missed > 0 || (readiness !== null && readiness < 5),
+      readinessDate,
+      needsAttention: missed > 0 || (readiness !== null && readinessDate === today && readiness < 5),
     }
   })
 
@@ -103,7 +116,7 @@ export default async function CoachDashboard() {
   const totalWeek = rows.reduce((s, r) => s + r.weekTotal, 0)
   const totalMissed = rows.reduce((s, r) => s + r.missed, 0)
   const attentionCount = rows.filter(r => r.needsAttention).length
-  const checkedIn = rows.filter(r => r.readiness !== null).length
+  const checkedIn = rows.filter(r => r.readinessDate === today).length
 
   const stats = [
     { label: 'Athletes', value: String(rows.length), icon: Users, tone: 'text-blue-400 bg-blue-600/10' },
@@ -238,8 +251,13 @@ export default async function CoachDashboard() {
                       {/* Readiness */}
                       <div className="text-xs">
                         {r.readiness !== null ? (
-                          <span className={cn('inline-flex px-2 py-0.5 rounded-full font-medium', getReadinessBadge(r.readiness))}>
-                            {getReadinessLabel(r.readiness)} {r.readiness.toFixed(1)}
+                          <span className={cn('inline-flex items-center gap-1.5', r.readinessDate !== today && 'opacity-60')}>
+                            <span className={cn('inline-flex px-2 py-0.5 rounded-full font-medium', getReadinessBadge(r.readiness))}>
+                              {getReadinessLabel(r.readiness)} {r.readiness.toFixed(1)}
+                            </span>
+                            {r.readinessDate && r.readinessDate !== today && (
+                              <span className="text-zinc-500">{formatWeekday(r.readinessDate)}</span>
+                            )}
                           </span>
                         ) : (
                           <span className="text-zinc-600">No check-in</span>
