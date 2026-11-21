@@ -380,7 +380,7 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[], opts
       console.error('Loading program for schedule failed', id, error.message)
     }
   }
-  for (const part of chunk(programIds, 6)) await Promise.all(part.map(loadProgram))
+  for (const part of chunk(programIds, 12)) await Promise.all(part.map(loadProgram))
 
   const group = (rows: Row[]) => {
     const m = new Map<string, Row[]>()
