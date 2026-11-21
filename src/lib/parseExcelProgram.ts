@@ -89,7 +89,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
     const weekBlocks: { week: number; startCol: number }[] = []
     let localWeekNum = 0
     for (let col = 0; col < header.length; col++) {
-      if (/^PRESC(RIBED)? (WT|WEIGHT|LOAD)$/.test(String(norm(header[col]) ?? ''))) {
+      if (/^PRESC(RIBED)? (WT|WEIGHT|LOAD|TARGET|RPE|INTENSITY|EFFORT|%)$/.test(String(norm(header[col]) ?? ''))) {
         localWeekNum++
         weekBlocks.push({ week: localWeekNum, startCol: col })
       }
@@ -166,7 +166,7 @@ export function parseExcelProgram(buffer: ArrayBuffer): ParsedWeek[] {
       if (isExerciseStart) {
         const exercise: RawExercise = {
           // "FC1a: Back Squat" -> "Back Squat" (the complex is already shown by its section)
-          name: String(row[nameCol]).replace(/^[A-Z]{1,3}\d{1,2}[a-z]?\s*[:.)]\s*/, '').trim() || String(row[nameCol]),
+          name: String(row[nameCol]).replace(/\s+/g, ' ').trim().replace(/^[A-Z]{1,3}\d{1,2}[a-z]?(\s*[:.)]\s*|\s+)/, '').trim() || String(row[nameCol]).trim(),
           section: currentSection,
           coachingNote: null,
           sets: [],
