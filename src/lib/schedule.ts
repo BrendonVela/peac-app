@@ -197,7 +197,6 @@ export const STATUS_BADGE: Record<WorkoutStatus, 'green' | 'blue' | 'default' | 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = any
 
-const PROGRAM_TREE = 'id, title, training_blocks(id, title, week_number, order, workouts(id, title, day_of_week, workout_exercises(id)))'
 
 /** Turn one athlete's assignments, logged results and moved dates into their schedule */
 function buildSchedule(
@@ -325,6 +324,54 @@ function buildSchedule(
   return { today, assignments, items, lastLogged: lastStamp ? toLocalISO(lastStamp) : null }
 }
 
+/**
+ * Programs with their weeks, days and exercise ids, in the shape buildSchedule expects.
+ * Loaded as plain lists, a page at a time. (Asking for whole programs nested in one request
+ * timed out on long 12-month plans, and those athletes showed "No program assigned".)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadProgramTrees(supabase: any, programIds: string[]): Promise<Map<string, Row>> {
+  const out = new Map<string, Row>()
+  if (programIds.length === 0) return out
+
+  const perProgram = async (pid: string) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const [p, b, w, x] = await Promise.all([
+        supabase.from('programs').select('id, title').eq('id', pid).maybeSingle(),
+        fetchAll<Row>((f, t) => supabase.from('training_blocks').select('id, title, week_number, order')
+          .eq('program_id', pid).order('id').range(f, t)),
+        fetchAll<Row>((f, t) => supabase.from('workouts').select('id, block_id, title, day_of_week')
+          .eq('program_id', pid).order('id').range(f, t)),
+        fetchAll<Row>((f, t) => supabase.from('workout_exercises').select('id, workout_id, workouts!inner(program_id)')
+          .eq('workouts.program_id', pid).order('id').range(f, t)),
+      ])
+      const err = p.error || b.error || w.error || x.error
+      if (err) {
+        console.error('Loading program for schedule failed', pid, err.message)
+        continue
+      }
+      if (!p.data) return
+      const exByWorkout = new Map<string, Row[]>()
+      for (const r of x.data) { const l = exByWorkout.get(r.workout_id) ?? []; l.push({ id: r.id }); exByWorkout.set(r.workout_id, l) }
+      const wByBlock = new Map<string, Row[]>()
+      for (const r of w.data) {
+        if (!r.block_id) continue
+        const l = wByBlock.get(r.block_id) ?? []
+        l.push({ id: r.id, title: r.title, day_of_week: r.day_of_week, workout_exercises: exByWorkout.get(r.id) ?? [] })
+        wByBlock.set(r.block_id, l)
+      }
+      out.set(pid, {
+        id: p.data.id,
+        title: p.data.title,
+        training_blocks: b.data.map(bl => ({ ...bl, workouts: wByBlock.get(bl.id) ?? [] })),
+      })
+      return
+    }
+  }
+  for (const part of chunk(programIds, 8)) await Promise.all(part.map(perProgram))
+  return out
+}
+
 /** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAthleteSchedule(supabase: any, athleteId: string, opts: { athleteView?: boolean } = {}): Promise<AthleteSchedule> {
@@ -366,21 +413,8 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[], opts
   }
 
   // Each program's weeks/days once, shared by everyone on it
-  const programsById = new Map<string, Row>()
   const programIds = Array.from(new Set(assignments.map(a => a.program_id).filter(Boolean)))
-  // One program per request: asking for many big programs at once can time out,
-  // and then every athlete on them showed "No program assigned"
-  const loadProgram = async (id: string) => {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const { data, error } = await supabase.from('programs').select(PROGRAM_TREE).eq('id', id).maybeSingle()
-      if (!error) {
-        if (data) programsById.set(data.id, data)
-        return
-      }
-      console.error('Loading program for schedule failed', id, error.message)
-    }
-  }
-  for (const part of chunk(programIds, 12)) await Promise.all(part.map(loadProgram))
+  const programsById = await loadProgramTrees(supabase, programIds)
 
   const group = (rows: Row[]) => {
     const m = new Map<string, Row[]>()
