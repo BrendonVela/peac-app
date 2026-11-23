@@ -205,7 +205,10 @@ function buildSchedule(
   programsById: Map<string, Row>,
   results: Row[],
   overrideRows: Row[],
-  athleteView = false
+  athleteView = false,
+  // From the fast database function: workout id -> exercises done + when the last one was done
+  stats?: Map<string, { d: number; t: string | null }>,
+  lastLoggedAt?: string | null
 ): AthleteSchedule {
   // Exercise completion: workout_exercise_id -> latest completed timestamp
   const completedAt = new Map<string, string>()
@@ -278,16 +281,27 @@ function buildSchedule(
         const defaultDate = addDays(weekStart, suggestedOffset(k, n))
         const override = overrides.get(w.id)
 
-        const wxIds: string[] = ((w.workout_exercises ?? []) as any[]).map(x => x.id)
-        const doneStamps = wxIds.map(id => completedAt.get(id)).filter((s): s is string => !!s)
-        const exerciseCount = wxIds.length
-        const doneCount = doneStamps.length
+        let exerciseCount: number
+        let doneCount: number
+        let lastDone: string | null = null
+        if (typeof w.n === 'number') {
+          const st = stats?.get(w.id)
+          exerciseCount = w.n
+          doneCount = Math.min(st?.d ?? 0, exerciseCount)
+          lastDone = st?.t ?? null
+        } else {
+          const wxIds: string[] = ((w.workout_exercises ?? []) as any[]).map(x => x.id)
+          const doneStamps = wxIds.map(id => completedAt.get(id)).filter((s): s is string => !!s)
+          exerciseCount = wxIds.length
+          doneCount = doneStamps.length
+          lastDone = doneStamps.sort()[doneStamps.length - 1] ?? null
+        }
 
         let status: WorkoutStatus
         let completedDate: string | null = null
         if (exerciseCount > 0 && doneCount === exerciseCount) {
           status = 'done'
-          completedDate = toLocalISO(doneStamps.sort()[doneStamps.length - 1])
+          completedDate = lastDone ? toLocalISO(lastDone) : null
         } else if (doneCount > 0) {
           status = 'in_progress'
         } else if (today > weekEnd) {
@@ -319,7 +333,7 @@ function buildSchedule(
     })
   }
 
-  let lastStamp: string | null = null
+  let lastStamp: string | null = lastLoggedAt ?? null
   for (const r of results) if (r.logged_at && (!lastStamp || r.logged_at > lastStamp)) lastStamp = r.logged_at
   return { today, assignments, items, lastLogged: lastStamp ? toLocalISO(lastStamp) : null }
 }
@@ -372,6 +386,60 @@ async function loadProgramTrees(supabase: any, programIds: string[]): Promise<Ma
   return out
 }
 
+/** Everything for many athletes' schedules in ONE request. Returns null if the database function isn't installed. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadViaDatabase(supabase: any, ids: string[], today: string, athleteView: boolean): Promise<Map<string, AthleteSchedule> | null> {
+  const parts = chunk(ids, 200)
+  const replies = await Promise.all(parts.map(part => supabase.rpc('get_schedule_data', { p_athlete_ids: part })))
+  if (replies.some((r: any) => r.error || !r.data)) {
+    const err = replies.find((r: any) => r.error)?.error
+    if (err) console.error('get_schedule_data failed, using the slower way', err.message)
+    return null
+  }
+  const assignments: Row[] = [], overrides: Row[] = [], programs: Row[] = [], stats: Row[] = [], last: Row[] = []
+  for (const r of replies as any[]) {
+    assignments.push(...(r.data.assignments ?? []))
+    overrides.push(...(r.data.overrides ?? []))
+    programs.push(...(r.data.programs ?? []))
+    stats.push(...(r.data.stats ?? []))
+    last.push(...(r.data.last ?? []))
+  }
+  // Rebuild each program as weeks -> days, the shape buildSchedule reads
+  const programsById = new Map<string, Row>()
+  for (const p of programs) {
+    if (programsById.has(p.id)) continue
+    const byBlock = new Map<string, Row[]>()
+    for (const w of (p.workouts ?? []) as Row[]) {
+      const l = byBlock.get(w.block_id) ?? []
+      l.push(w)
+      byBlock.set(w.block_id, l)
+    }
+    programsById.set(p.id, {
+      id: p.id,
+      title: p.title,
+      training_blocks: ((p.blocks ?? []) as Row[]).map(b => ({ ...b, workouts: byBlock.get(b.id) ?? [] })),
+    })
+  }
+  const statsBy = new Map<string, Map<string, { d: number; t: string | null }>>()
+  for (const s of stats) {
+    const m = statsBy.get(s.a) ?? new Map()
+    m.set(s.w, { d: Number(s.d) || 0, t: s.t ?? null })
+    statsBy.set(s.a, m)
+  }
+  const lastBy = new Map<string, string>(last.map(l => [l.a, l.t]))
+  const group = (rows: Row[]) => {
+    const m = new Map<string, Row[]>()
+    for (const r of rows) { const l = m.get(r.athlete_id) ?? []; l.push(r); m.set(r.athlete_id, l) }
+    return m
+  }
+  const aBy = group(assignments), oBy = group(overrides)
+  const out = new Map<string, AthleteSchedule>()
+  for (const id of ids) {
+    out.set(id, buildSchedule(today, aBy.get(id) ?? [], programsById, [], oBy.get(id) ?? [], athleteView, statsBy.get(id), lastBy.get(id) ?? null))
+  }
+  return out
+}
+
 /** Load everything needed to build an athlete's schedule (works for the athlete and their coach) */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAthleteSchedule(supabase: any, athleteId: string, opts: { athleteView?: boolean } = {}): Promise<AthleteSchedule> {
@@ -390,6 +458,10 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[], opts
   const ids = Array.from(new Set(athleteIds.filter(Boolean)))
   if (ids.length === 0) return out
 
+  // Fast path: one database call does the heavy lifting (supabase/speed.sql)
+  const fast = await loadViaDatabase(supabase, ids, today, !!opts.athleteView)
+  if (fast) return fast
+
   const assignments: Row[] = []
   const results: Row[] = []
   const overrides: Row[] = []
@@ -398,7 +470,7 @@ export async function getTeamSchedules(supabase: any, athleteIds: string[], opts
       fetchAll<Row>((from, to) =>
         supabase.from('program_assignments').select('*').in('athlete_id', part).range(from, to)),
       fetchAll<Row>((from, to) =>
-        supabase.from('workout_results').select('athlete_id, workout_id, workout_exercise_id, completed, logged_at').in('athlete_id', part).order('logged_at').range(from, to)),
+        supabase.from('workout_results').select('athlete_id, workout_id, workout_exercise_id, completed, logged_at').in('athlete_id', part).order('logged_at').order('id').range(from, to)),
       fetchAll<Row>((from, to) =>
         supabase.from('workout_schedule').select('athlete_id, workout_id, scheduled_date').in('athlete_id', part).range(from, to)),
     ])

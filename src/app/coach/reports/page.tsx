@@ -34,7 +34,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: { da
     ? await Promise.all([
         supabase.from('check_ins').select('athlete_id, date, readiness_score').in('athlete_id', ids).gte('date', from),
         supabase.from('workout_sessions').select('athlete_id, rpe, minutes, completed_at').in('athlete_id', ids).gte('completed_at', `${from}T00:00:00`),
-        fetchAll<any>((from, to) => supabase.from('workout_results').select('athlete_id, logged_at').in('athlete_id', ids).order('logged_at', { ascending: false }).range(from, to), 1000, 20000),
+        fetchAll<any>((from, to) => supabase.from('workout_results').select('athlete_id, logged_at').in('athlete_id', ids).order('logged_at', { ascending: false }).order('id').range(from, to), 1000, 20000),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }]
 
