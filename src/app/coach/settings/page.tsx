@@ -5,6 +5,7 @@ import { AccountSettings } from '@/components/settings/AccountSettings'
 import { ReadinessSettings } from '@/components/settings/ReadinessSettings'
 import { BrandingSettings } from '@/components/settings/BrandingSettings'
 import { logoUrl, cleanColor } from '@/lib/brand'
+import { VoiceSettings } from '@/components/voice/VoiceSettings'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -26,14 +27,17 @@ export default async function SettingsPage() {
       role="coach"
       viewingAs={viewAs?.name ?? null}
       extra={
-        !viewAs && !isAssistant ? (
+        <>
+        <VoiceSettings />
+        {!viewAs && !isAssistant ? (
           <>
             {brandRow && (
               <BrandingSettings initial={{ name: brandRow.brand_name ?? '', color: cleanColor(brandRow.brand_color), logoUrl: logoUrl(brandRow.brand_logo_path) }} />
             )}
             {rules && <ReadinessSettings initial={{ on: rules.readiness_on, low: Number(rules.readiness_low), cut: rules.readiness_cut }} />}
           </>
-        ) : null
+        ) : null}
+        </>
       }
     />
   )

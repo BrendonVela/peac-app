@@ -5,6 +5,8 @@ import { ViewAsBanner } from '@/components/ViewAsBanner'
 import { getViewAs, athleteMatch } from '@/lib/acting'
 import { brandFromRow, brandStyle } from '@/lib/brand'
 import { VoiceCoach } from '@/components/voice/VoiceCoach'
+import { VoiceGate } from '@/components/voice/VoiceGate'
+import { voiceAllowed } from '@/lib/voice/server'
 
 export default async function AthleteLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -22,9 +24,11 @@ export default async function AthleteLayout({ children }: { children: React.Reac
     .match(await athleteMatch(supabase, user.id))
     .maybeSingle()
   const brand = brandFromRow((me as any)?.coaches)
+  const voiceOn = await voiceAllowed(supabase)
 
   return (
     <div className={`min-h-screen bg-zinc-950 ${brand?.color ? 'branded' : ''}`} style={brandStyle(brand)}>
+      <VoiceGate allowed={voiceOn} />
       <AthleteNav brand={brand ? { name: brand.name, logoUrl: brand.logoUrl } : null} />
       <main className="md:ml-60 min-h-screen">
         {viewingAthlete && <ViewAsBanner viewAs={viewAs!} />}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Mic, Volume2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
-import { canListen, canSpeak, getVoiceSettings, listVoices, setVoiceSettings, speak, type VoiceSettings as VS } from '@/lib/voice/core'
+import { canListen, canSpeak, getVoiceChoices, listVoices, onVoiceAllowed, setVoiceSettings, speak, type VoiceSettings as VS } from '@/lib/voice/core'
 
 function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -19,9 +19,11 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 export function VoiceSettings() {
   const [s, setS] = useState<VS | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [allowed, setAllowed] = useState(true)
+  useEffect(() => onVoiceAllowed(setAllowed), [])
 
   useEffect(() => {
-    setS(getVoiceSettings())
+    setS(getVoiceChoices())
     const load = () => setVoices(listVoices())
     load()
     if (canSpeak()) window.speechSynthesis.onvoiceschanged = load
@@ -31,7 +33,7 @@ export function VoiceSettings() {
 
   function update(patch: Partial<VS>) {
     setVoiceSettings(patch)
-    setS(getVoiceSettings())
+    setS(getVoiceChoices())
   }
 
   if (!s) return null
@@ -43,6 +45,11 @@ export function VoiceSettings() {
         <CardTitle className="flex items-center gap-2"><Volume2 className="w-4 h-4 text-blue-400" /> Voice coach</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        {!allowed ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            The voice coach and microphone are turned off for everyone right now while PEAC works on them. They&apos;ll come back here when they&apos;re ready.
+          </p>
+        ) : (<>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm text-white">Talk to me</p>
@@ -79,7 +86,16 @@ export function VoiceSettings() {
 
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm text-white flex items-center gap-1.5"><Mic className="w-3.5 h-3.5 text-red-400" /> Answer out loud</p>
+                <p className="text-sm text-white flex items-center gap-1.5"><Mic className="w-3.5 h-3.5 text-red-400" /> Microphone</p>
+                <p className="text-xs text-zinc-500">Off: the coach still talks, but never listens, and the mic button is hidden.</p>
+              </div>
+              <Switch on={s.mic} onChange={v => update({ mic: v })} label="Microphone" />
+            </div>
+
+            {s.mic && <>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-white">Answer out loud</p>
                 <p className="text-xs text-zinc-500">After I ask something (like check-in questions), I listen for your answer — no tapping.</p>
               </div>
               <Switch on={s.autoListen} onChange={v => update({ autoListen: v })} label="Answer out loud" />
@@ -91,6 +107,7 @@ export function VoiceSettings() {
               </div>
               <Switch on={s.wakeWord} onChange={v => update({ wakeWord: v })} label="Hey PEAC" />
             </div>
+            </>}
             {!canListen() && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
                 This browser can&apos;t listen, so you&apos;ll answer with taps. Listening works best in Chrome (Android) or Safari/Chrome on iPhone rather than the home-screen app.
@@ -98,6 +115,7 @@ export function VoiceSettings() {
             )}
           </>
         )}
+        </>)}
       </CardContent>
     </Card>
   )

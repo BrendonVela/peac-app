@@ -4,6 +4,8 @@ import { CoachNav } from '@/components/layout/CoachNav'
 import { ViewAsBanner } from '@/components/ViewAsBanner'
 import { getViewAs, coachMatch } from '@/lib/acting'
 import { brandFromRow, brandStyle } from '@/lib/brand'
+import { VoiceGate } from '@/components/voice/VoiceGate'
+import { voiceAllowed } from '@/lib/voice/server'
 
 export default async function CoachLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -23,9 +25,11 @@ export default async function CoachLayout({ children }: { children: React.ReactN
     .match(await coachMatch(supabase, user.id))
     .maybeSingle()
   const brand = brandFromRow(team)
+  const voiceOn = await voiceAllowed(supabase)
 
   return (
     <div className={`min-h-screen bg-zinc-950 ${brand?.color ? 'branded' : ''}`} style={brandStyle(brand)}>
+      <VoiceGate allowed={voiceOn} />
       <CoachNav isAdmin={isAdmin === true} brand={brand ? { name: brand.name, logoUrl: brand.logoUrl } : null} />
       <main className="md:ml-60 min-h-screen">
         {viewAs && <ViewAsBanner viewAs={viewAs} />}

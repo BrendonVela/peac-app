@@ -12,19 +12,47 @@ export interface VoiceSettings {
   rate: number              // 0.8 – 1.4
   autoListen: boolean       // after a question, listen for the answer automatically
   wakeWord: boolean         // quietly listen for "Hey PEAC"
+  mic: boolean              // allowed to use the microphone at all
 }
 const KEY = 'peac-voice'
-const DEFAULTS: VoiceSettings = { enabled: true, voiceURI: null, rate: 1, autoListen: true, wakeWord: true }
+const DEFAULTS: VoiceSettings = { enabled: true, voiceURI: null, rate: 1, autoListen: true, wakeWord: true, mic: true }
 const settingSubs = new Set<(s: VoiceSettings) => void>()
 
-export function getVoiceSettings(): VoiceSettings {
+// Admin switch: when PEAC turns the voice coach off for everyone, nothing talks or listens
+let allowed = true
+const allowedSubs = new Set<(on: boolean) => void>()
+export function getVoiceAllowed() { return allowed }
+export function onVoiceAllowed(f: (on: boolean) => void) { allowedSubs.add(f); f(allowed); return () => { allowedSubs.delete(f) } }
+export function setVoiceAllowed(on: boolean) {
+  if (typeof window === 'undefined' || on === allowed) return
+  allowed = on
+  if (!on) { stopSpeaking(); stopListening(); stopWake() }
+  const eff = getVoiceSettings()
+  allowedSubs.forEach(f => f(on))
+  settingSubs.forEach(f => f(eff))
+  if (on) scheduleWake()
+}
+
+/** What the person chose on this phone */
+function readSettings(): VoiceSettings {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') } } catch { return DEFAULTS }
 }
+/** What actually applies right now (their choice, minus anything turned off by the admin or the mic switch) */
+export function getVoiceSettings(): VoiceSettings {
+  const s = readSettings()
+  if (!allowed) return { ...s, enabled: false, mic: false, autoListen: false, wakeWord: false }
+  if (!s.mic) return { ...s, autoListen: false, wakeWord: false }
+  return s
+}
+/** Their own choices (for the settings screen) */
+export function getVoiceChoices(): VoiceSettings { return readSettings() }
 export function setVoiceSettings(patch: Partial<VoiceSettings>) {
-  const next = { ...getVoiceSettings(), ...patch }
-  try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* private mode */ }
+  const saved = { ...readSettings(), ...patch }
+  try { localStorage.setItem(KEY, JSON.stringify(saved)) } catch { /* private mode */ }
+  const next = getVoiceSettings()
   settingSubs.forEach(f => f(next))
   if (!next.enabled) stopSpeaking()
+  if (!next.mic) stopListening()
   if (!next.enabled || !next.wakeWord) stopWake()
   else scheduleWake()
 }
@@ -88,7 +116,7 @@ export function stopSpeaking() {
 /** Say something. Resolves when finished (or right away if the voice is off). */
 export function speak(text: string, opts: { force?: boolean } = {}): Promise<void> {
   const s = getVoiceSettings()
-  if ((!s.enabled && !opts.force) || !canSpeak() || !text.trim()) return Promise.resolve()
+  if (!allowed || (!s.enabled && !opts.force) || !canSpeak() || !text.trim()) return Promise.resolve()
   // The shared weight-room tablet stays quiet; so does a playing demo video
   if (!opts.force && (window.location.pathname.startsWith('/kiosk') || pausers.size > 0)) return Promise.resolve()
   stopListening()
@@ -141,6 +169,7 @@ export function stopListening() {
 export function listenOnce(maxMs = 8000): Promise<string> {
   const R = Recognition()
   if (!R) return Promise.reject(new Error('Voice commands are not supported in this browser. Try Chrome, or use the buttons.'))
+  if (!getVoiceSettings().mic) return Promise.resolve('')
   stopListening()
   stopWake()
   if (canSpeak()) window.speechSynthesis.cancel()
@@ -188,7 +217,7 @@ export function listenOnce(maxMs = 8000): Promise<string> {
 export async function ask(question: string): Promise<string> {
   await speak(question)
   const s = getVoiceSettings()
-  if (!s.enabled || !s.autoListen || !canListen()) return ''
+  if (!s.enabled || !s.mic || !s.autoListen || !canListen()) return ''
   try { return await listenOnce(7000) } catch { return '' }
 }
 

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { AdminPanel, type Person, type CoachInvite } from './AdminPanel'
+import { VoiceSwitch } from './VoiceSwitch'
+import { voiceAllowed } from '@/lib/voice/server'
 
 export default async function AdminPage() {
   const supabase = createClient()
@@ -16,6 +18,7 @@ export default async function AdminPage() {
     supabase.from('coach_invites').select('*').order('created_at', { ascending: false }),
     supabase.from('app_settings').select('value').eq('key', 'coach_signup_code').maybeSingle(),
   ])
+  const voiceOn = await voiceAllowed(supabase)
 
   const adminDb = createAdminClient()
   const { data: codeRows } = adminDb
@@ -32,6 +35,7 @@ export default async function AdminPage() {
         <h1 className="text-2xl font-bold">Admin</h1>
         <p className="text-zinc-400 text-sm mt-0.5">Manage every coach and athlete in PEAC.</p>
       </div>
+      <VoiceSwitch everyone={voiceOn} />
       {error ? (
         <p className="text-sm text-red-400">Could not load people: {error.message}</p>
       ) : (

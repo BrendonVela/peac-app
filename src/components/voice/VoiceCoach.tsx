@@ -31,6 +31,7 @@ export function VoiceCoach() {
   const [reply, setReply] = useState('')
   const [help, setHelp] = useState(false)
   const [enabled, setEnabled] = useState(true)
+  const [micOn, setMicOn] = useState(true)
   const [timerEnd, setTimerEnd] = useState<number | null>(null)
   const [now, setNow] = useState(0)
   const busy = useRef(false)
@@ -53,7 +54,10 @@ export function VoiceCoach() {
   const pending = useRef<{ to: string; text: string } | null>(null)
 
   useEffect(() => onVoiceStatus(setSt), [])
-  useEffect(() => { setEnabled(getVoiceSettings().enabled); return onVoiceSettings(s => setEnabled(s.enabled)) }, [])
+  useEffect(() => {
+    const s0 = getVoiceSettings(); setEnabled(s0.enabled); setMicOn(s0.mic)
+    return onVoiceSettings(s => { setEnabled(s.enabled); setMicOn(s.mic) })
+  }, [])
 
   /** Say it and show it */
   const say = (text: string) => { setReply(text); return speak(text) }
@@ -226,7 +230,7 @@ export function VoiceCoach() {
             )}
           </div>
         )}
-        <button
+        {micOn && <button
           data-voice-mic
           onClick={tap}
           aria-label={st.state === 'listening' ? 'Stop listening' : st.state === 'speaking' ? 'Stop talking' : 'Talk to your coach'}
@@ -237,7 +241,7 @@ export function VoiceCoach() {
         >
           {st.state === 'speaking' ? <Volume2 className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
           {wakeOn && st.state === 'idle' && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-zinc-950" title='Listening for "Hey PEAC"' />}
-        </button>
+        </button>}
       </div>
 
       {help && (

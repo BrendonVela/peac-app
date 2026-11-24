@@ -60,6 +60,19 @@ export async function setCoachSignupCode(value: string | null) {
   return fail(error) ?? { ok: true, code: v }
 }
 
+// ---------- Voice coach on/off for everyone ----------
+export async function setVoiceForEveryone(on: boolean) {
+  const supabase = createClient()
+  const { data: isAdmin } = await supabase.rpc('is_admin')
+  if (isAdmin !== true) return { error: 'Only the admin can do this.' }
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: 'voice_enabled', value: on ? 'true' : 'false', updated_at: new Date().toISOString() })
+  if (error) return { error: /app_settings/.test(error.message) ? 'Run supabase/voice_switch.sql in Supabase first.' : error.message }
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
 export async function generateCoachSignupCode() {
   return setCoachSignupCode('PEAC-' + code(6))
 }
