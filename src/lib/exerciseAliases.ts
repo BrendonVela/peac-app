@@ -246,12 +246,8 @@ export const ALIASES: Record<string, [string, string | null]> = {
   "60 yd Dash",
   "Timed"
  ],
- "90/90 band external rotation": [
-  "Band Resisted Elevated External Rotation (90 Degrees)",
-  null
- ],
  "band external rotation @ 90/90": [
-  "Band Resisted Elevated External Rotation (90 Degrees)",
+  "90/90 Band External Rotation",
   null
  ],
  "band external rotation": [
