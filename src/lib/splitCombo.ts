@@ -8,6 +8,252 @@ const ONE_WORD_OK = new Set(['copenhagen', 'nordic', 'pallof', 'cat-cow', 'pull-
 // Whole rows that are a named circuit or flow, not a pair of exercises
 const PLACEHOLDER = /circuit|flow\b|mobility tab|complex|finisher|close-out|arm care [a-z]\b/i
 
+// Named circuits and combos from the plans, with the exercises they stand for
+// (read from the plans' MOBILITY tabs and coaching notes)
+const KNOWN_GROUPS: Record<string, string[]> = {
+  "full arm care circuit": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Prone Y-T-W"
+  ],
+  "full arm care circuit (er, ir, y, t, w)": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Prone Y-T-W"
+  ],
+  "full arm care circuit + forearm work": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Prone Y-T-W",
+    "Forearm/Wrist Roller",
+    "DB Pronation / Supination"
+  ],
+  "full arm care + forearm circuit": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Prone Y-T-W",
+    "Forearm/Wrist Roller",
+    "DB Pronation / Supination"
+  ],
+  "arm care a — band er/ir + scap y": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Band Y-Raise (low trap)"
+  ],
+  "arm care b — prone y-t-w + forearm": [
+    "Prone Y-T-W",
+    "Wrist Flexion/Extension with Light DB",
+    "DB Pronation / Supination"
+  ],
+  "cuff circuit: band er/ir · face pull · y-raise": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Banded Face Pull",
+    "Band Y-Raise (low trap)"
+  ],
+  "band er, ir, prone t — full arm care circuit": [
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Prone T"
+  ],
+  "full thrower's ten circuit": [
+    "Band D2 Flexion / Extension",
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Band Resisted Abduction and External Rotation at 90 Degrees",
+    "DB Scaption",
+    "Side-Lying DB External Rotation",
+    "Prone Y-T-W"
+  ],
+  "thrower's ten (complete circuit)": [
+    "Band D2 Flexion / Extension",
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Band Resisted Abduction and External Rotation at 90 Degrees",
+    "DB Scaption",
+    "Side-Lying DB External Rotation",
+    "Prone Y-T-W"
+  ],
+  "thrower's ten (full circuit)": [
+    "Band D2 Flexion / Extension",
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Band Resisted Abduction and External Rotation at 90 Degrees",
+    "DB Scaption",
+    "Side-Lying DB External Rotation",
+    "Prone Y-T-W"
+  ],
+  "thrower's ten circuit": [
+    "Band D2 Flexion / Extension",
+    "Band Resisted External Rotation",
+    "Band Resisted Internal Rotation",
+    "Band Resisted Abduction and External Rotation at 90 Degrees",
+    "DB Scaption",
+    "Side-Lying DB External Rotation",
+    "Prone Y-T-W"
+  ],
+  "thrower's ten (abbreviated — 6 key exercises)": [
+    "Band D2 Flexion / Extension",
+    "Side-Lying DB External Rotation",
+    "DB Scaption",
+    "Banded Face Pull",
+    "Band row",
+    "Sleeper Stretch (gentle)"
+  ],
+  "hip + t-spine circuit — see mobility tab": [
+    "Foam Roller T-Spine Extension",
+    "T-Spine Open Book",
+    "Thread the Needle",
+    "Quadruped Thoracic Rotations",
+    "Side Lying Thoracic Windmill",
+    "90/90 Hip Switch → Lift-Off",
+    "Hip Airplane",
+    "Couch Stretch w/ PPT",
+    "Worlds Greatest Stretch",
+    "Adductor Rock Back"
+  ],
+  "full mobility circuit — see mobility tab": [
+    "Foam Roller T-Spine Extension",
+    "T-Spine Open Book",
+    "Thread the Needle",
+    "Quadruped Thoracic Rotations",
+    "Side Lying Thoracic Windmill",
+    "90/90 Hip Switch → Lift-Off",
+    "Hip Airplane",
+    "Couch Stretch w/ PPT",
+    "Worlds Greatest Stretch",
+    "Adductor Rock Back"
+  ],
+  "full circuit — see mobility tab": [
+    "Foam Roller T-Spine Extension",
+    "T-Spine Open Book",
+    "Thread the Needle",
+    "Quadruped Thoracic Rotations",
+    "Side Lying Thoracic Windmill",
+    "90/90 Hip Switch → Lift-Off",
+    "Hip Airplane",
+    "Couch Stretch w/ PPT",
+    "Worlds Greatest Stretch",
+    "Adductor Rock Back"
+  ],
+  "full mobility circuit": [
+    "Foam Roller T-Spine Extension",
+    "T-Spine Open Book",
+    "Thread the Needle",
+    "Quadruped Thoracic Rotations",
+    "Side Lying Thoracic Windmill",
+    "90/90 Hip Switch → Lift-Off",
+    "Hip Airplane",
+    "Couch Stretch w/ PPT",
+    "Worlds Greatest Stretch",
+    "Adductor Rock Back"
+  ],
+  "mobility flow (mobility tab - full circuit)": [
+    "Foam Roller T-Spine Extension",
+    "T-Spine Open Book",
+    "Thread the Needle",
+    "Quadruped Thoracic Rotations",
+    "Side Lying Thoracic Windmill",
+    "90/90 Hip Switch → Lift-Off",
+    "Hip Airplane",
+    "Couch Stretch w/ PPT",
+    "Worlds Greatest Stretch",
+    "Adductor Rock Back"
+  ],
+  "shoulder + t-spine circuit — see mobility tab": [
+    "Shoulder CARs",
+    "Sleeper Stretch (gentle)",
+    "Cross-Body Stretch",
+    "Doorway Pec Stretch",
+    "Dead Hang Lat Stretch",
+    "Prone Y-T-W",
+    "Band Resisted External Rotation",
+    "Scap Push Up",
+    "T-Spine Open Book",
+    "Quadruped Thoracic Rotations",
+    "Foam Roller T-Spine Extension"
+  ],
+  "t-spine + shoulder mobility finisher": [
+    "T-Spine Open Book",
+    "Sleeper Stretch (gentle)",
+    "Shoulder CARs"
+  ],
+  "t-spine + hip mobility full circuit": [
+    "Quadruped Thoracic Rotations",
+    "T-Spine Open Book",
+    "Worlds Greatest Stretch",
+    "90-90 Pails and Rails Hip Internal Rotation",
+    "Couch Stretch",
+    "Adductor Rock Back"
+  ],
+  "full t-spine + shoulder + hip mobility circuit": [
+    "Quadruped Thoracic Rotations",
+    "T-Spine Open Book",
+    "Shoulder CARs",
+    "Sleeper Stretch (gentle)",
+    "Worlds Greatest Stretch",
+    "Couch Stretch",
+    "Adductor Rock Back"
+  ],
+  "full mobility close-out: t-spine + shoulder + hip": [
+    "Quadruped Thoracic Rotations",
+    "T-Spine Open Book",
+    "Shoulder CARs",
+    "Sleeper Stretch (gentle)",
+    "Worlds Greatest Stretch",
+    "Couch Stretch",
+    "Adductor Rock Back"
+  ],
+  "hip flexor + adductor flow (mobility tab)": [
+    "Couch Stretch",
+    "Half-Kneeling Hip Flexor Stretch",
+    "Adductor Rock Back",
+    "Cossack Squat"
+  ],
+  "mobility: 90/90 · couch stretch · t-spine · calf": [
+    "90-90 Hip Rotation",
+    "Couch Stretch",
+    "Quadruped Thoracic Rotations",
+    "Calf Stretch"
+  ],
+  "hammer curl + triceps + rear delt": [
+    "DB Hammer Curl",
+    "DB Overhead Triceps Extension",
+    "Rear Delt Fly"
+  ],
+  "lateral raise + hammer curl + triceps": [
+    "Dumbbell Lateral Raise (Standing)",
+    "DB Hammer Curl",
+    "DB Overhead Triceps Extension"
+  ],
+  "lat + pec doorway stretch": [
+    "Dead Hang Lat Stretch",
+    "Doorway Pec Stretch"
+  ],
+  "lat + pec stretch": [
+    "Dead Hang Lat Stretch",
+    "Doorway Pec Stretch"
+  ],
+  "calf + tib raise": [
+    "Standing Calf Raise",
+    "Tibialis Raise"
+  ],
+  "calf + tibialis": [
+    "Standing Calf Raise",
+    "Tibialis Raise"
+  ],
+  "tibialis + calf": [
+    "Tibialis Raise",
+    "Standing Calf Raise"
+  ],
+  "tibialis + calf raise": [
+    "Tibialis Raise",
+    "Standing Calf Raise"
+  ]
+}
+// Names that look like two exercises but are one drill
+const NEVER_SPLIT = new Set(['bench lat + thoracic sink'])
+
 function topLevelParts(s: string): string[] {
   const parts: string[] = []
   let depth = 0, cur = ''
@@ -24,6 +270,9 @@ function topLevelParts(s: string): string[] {
 
 /** The separate exercises in a "+" name, or null when it should stay one exercise */
 export function splitCombo(name: string): string[] | null {
+  const key = name.trim().toLowerCase()
+  if (KNOWN_GROUPS[key]) return KNOWN_GROUPS[key]
+  if (NEVER_SPLIT.has(key)) return null
   if (!name.includes(' + ') || PLACEHOLDER.test(name)) return null
   const clean = name.replace(/\s*(\(\s*superset\s*\)|[—–-]\s*superset|\bsuperset)\s*$/i, '').trim()
   const parts = topLevelParts(clean)
@@ -59,8 +308,10 @@ export function splitCombosInWeeks<W extends { days: { exercises: { name: string
       for (const ex of day.exercises) {
         const parts = splitCombo(ex.name)
         if (!parts) { out.push(ex); continue }
-        const letter = nextLetter()
-        const section = `${ex.section ? ex.section + ' · ' : ''}Superset ${letter}`
+        // Already in a superset/circuit: the separate exercises just join it
+        const section = ex.section && /SUPERSET|SUPER SET|COMPLEX|CIRCUIT|TRI-?SET|GIANT SET/i.test(ex.section)
+          ? ex.section
+          : `${ex.section ? ex.section + ' · ' : ''}${parts.length >= 3 ? 'Circuit' : 'Superset'} ${nextLetter()}`
         for (const p of parts) out.push({ ...ex, name: p, section })
       }
       day.exercises = out
