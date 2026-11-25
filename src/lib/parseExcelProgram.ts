@@ -13,6 +13,8 @@ export interface ParsedExercise {
   section: string | null
   coachingNote: string | null
   sets: ParsedSet[]
+  /** Interchangeable exercises ("Barbell or DB Bench") -> saved as swaps */
+  alts?: string[]
 }
 
 export interface ParsedWarmup {

@@ -1,3 +1,5 @@
+import { cleanExerciseName, stripPrefix } from './cleanName'
+
 // "Band ER + Prone Y" in a program cell means two exercises done back to back (a superset),
 // not one exercise. This decides when a "+" name should be split, and into what.
 
@@ -254,6 +256,8 @@ const KNOWN_GROUPS: Record<string, string[]> = {
 // Names that look like two exercises but are one drill
 const NEVER_SPLIT = new Set(['bench lat + thoracic sink'])
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 function topLevelParts(s: string): string[] {
   const parts: string[] = []
   let depth = 0, cur = ''
@@ -262,6 +266,7 @@ function topLevelParts(s: string): string[] {
     if (c === '(') depth++
     if (c === ')') depth = Math.max(0, depth - 1)
     if (depth === 0 && s.startsWith(' + ', i)) { parts.push(cur.trim()); cur = ''; i += 2; continue }
+    if (depth === 0 && s.startsWith(' -> ', i)) { parts.push(cur.trim()); cur = ''; i += 3; continue } // contrast pair
     cur += c
   }
   parts.push(cur.trim())
@@ -273,7 +278,8 @@ export function splitCombo(name: string): string[] | null {
   const key = name.trim().toLowerCase()
   if (KNOWN_GROUPS[key]) return KNOWN_GROUPS[key]
   if (NEVER_SPLIT.has(key)) return null
-  if (!name.includes(' + ') || PLACEHOLDER.test(name)) return null
+  name = stripPrefix(name)
+  if (!(name.includes(' + ') || name.includes(' -> ')) || PLACEHOLDER.test(name)) return null
   const clean = name.replace(/\s*(\(\s*superset\s*\)|[—–-]\s*superset|\bsuperset)\s*$/i, '').trim()
   const parts = topLevelParts(clean)
   if (parts.length < 2) return null
@@ -299,6 +305,8 @@ export function splitCombosInWeeks<W extends { days: { exercises: { name: string
       for (const ex of day.exercises) {
         const m = ex.section?.match(/(?:SUPERSET|COMPLEX|CIRCUIT)\s+([A-Z])\b/i)
         if (m) used.add(m[1].toUpperCase())
+        const lab = stripPrefix(ex.name).match(/^([A-H])\d/) // "A1 Back Squat" uses A
+        if (lab) used.add(lab[1])
       }
       const nextLetter = () => {
         for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (!used.has(c)) { used.add(c); return c }
@@ -314,7 +322,23 @@ export function splitCombosInWeeks<W extends { days: { exercises: { name: string
           : `${ex.section ? ex.section + ' · ' : ''}${parts.length >= 3 ? 'Circuit' : 'Superset'} ${nextLetter()}`
         for (const p of parts) out.push({ ...ex, name: p, section })
       }
-      day.exercises = out
+      // Clean each name: "A1 Back Squat — heavy" -> "Back Squat" (cue "heavy", superset A)
+      const pairs = new Map<string, number>()
+      const cleaned = out.map(ex => {
+        const c = cleanExerciseName(ex.name)
+        if (c.pair) pairs.set(`${ex.section ?? ''}|${c.pair}`, (pairs.get(`${ex.section ?? ''}|${c.pair}`) ?? 0) + 1)
+        return { ex, c }
+      })
+      day.exercises = cleaned.map(({ ex, c }) => {
+        const e: any = { ...ex, name: c.name } // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (c.cue) e.coachingNote = [cap(c.cue), e.coachingNote].filter(Boolean).join('. ')
+        if (c.alts.length) e.alts = Array.from(new Set([...(e.alts ?? []), ...c.alts]))
+        const grouped = ex.section && /SUPERSET|SUPER SET|COMPLEX|CIRCUIT|TRI-?SET|GIANT SET/i.test(ex.section)
+        if (c.pair && (pairs.get(`${ex.section ?? ''}|${c.pair}`) ?? 0) >= 2 && !grouped) {
+          e.section = `${ex.section ? ex.section + ' · ' : ''}Superset ${c.pair}`
+        }
+        return e
+      })
     }
   }
   return weeks

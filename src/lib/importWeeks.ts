@@ -24,10 +24,15 @@ export async function prepareImport(supabase: any, coachId: string, weeks: Parse
   splitCombosInWeeks(weeks)
   // Every unique exercise name in the Excel file + its section (for category)
   const nameToSection = new Map<string, string | null>()
+  const swapPairs: [string, string][] = []
   for (const week of weeks) {
     for (const day of week.days) {
       for (const ex of day.exercises) {
         if (!nameToSection.has(ex.name)) nameToSection.set(ex.name, ex.section)
+        for (const alt of ex.alts ?? []) {
+          if (!nameToSection.has(alt)) nameToSection.set(alt, ex.section)
+          swapPairs.push([ex.name, alt])
+        }
       }
     }
   }
@@ -99,6 +104,17 @@ export async function prepareImport(supabase: any, coachId: string, weeks: Parse
     nameToId.set(key, newEx.id)
     titleToId.set(key, newEx.id)
     createdCount++
+  }
+
+  // "Barbell or DB Bench": the two are swaps for each other
+  const swapRows: { exercise_id: string; alternative_id: string }[] = []
+  for (const [a, b] of swapPairs) {
+    const ia = nameToId.get(a.trim().toLowerCase()), ib = nameToId.get(b.trim().toLowerCase())
+    if (ia && ib && ia !== ib) swapRows.push({ exercise_id: ia, alternative_id: ib }, { exercise_id: ib, alternative_id: ia })
+  }
+  if (swapRows.length) {
+    const { error: swapErr } = await supabase.from('exercise_alternatives').upsert(swapRows, { onConflict: 'exercise_id,alternative_id', ignoreDuplicates: true })
+    if (swapErr) console.error(`[import] swaps: ${swapErr.message}`)
   }
 
   for (const name of noVideo) console.log(`[import] NO VIDEO: "${name}"`)
