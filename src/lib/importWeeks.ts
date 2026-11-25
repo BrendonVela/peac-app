@@ -4,6 +4,7 @@ import type { ParsedWeek } from './parseExcelProgram'
 import { createExerciseMatcher } from './exerciseMatcher'
 import { liftForExercise } from './maxes'
 import { fetchAll } from './fetchAll'
+import { splitCombosInWeeks } from './splitCombo'
 
 function guessCategory(section: string | null): string {
   const s = (section || '').toUpperCase()
@@ -19,6 +20,8 @@ function guessCategory(section: string | null): string {
 /** Step 1: match/create every exercise and create the empty program. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function prepareImport(supabase: any, coachId: string, weeks: ParsedWeek[], title: string, description: string): Promise<{ programId: string; nameToId: Record<string, string> }> {
+  // "A + B" in one cell = two exercises done as a superset
+  splitCombosInWeeks(weeks)
   // Every unique exercise name in the Excel file + its section (for category)
   const nameToSection = new Map<string, string | null>()
   for (const week of weeks) {
@@ -117,6 +120,7 @@ export async function prepareImport(supabase: any, coachId: string, weeks: Parse
 /** Step 2: save some weeks (blocks, workouts, exercises) into the program. Safe to call in chunks. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function saveWeeks(supabase: any, programId: string, weeks: ParsedWeek[], idMap: Record<string, string>): Promise<{ workouts: number; exercises: number; firstError: string | null }> {
+  splitCombosInWeeks(weeks)
   const nameToId = new Map(Object.entries(idMap))
   const program = { id: programId }
   let workoutCount = 0
