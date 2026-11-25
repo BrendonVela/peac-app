@@ -1,4 +1,5 @@
 import { cleanExerciseName, stripPrefix } from './cleanName'
+import { aliasFor } from './exerciseAliases'
 
 // "Band ER + Prone Y" in a program cell means two exercises done back to back (a superset),
 // not one exercise. This decides when a "+" name should be split, and into what.
@@ -332,6 +333,12 @@ export function splitCombosInWeeks<W extends { days: { exercises: { name: string
       day.exercises = cleaned.map(({ ex, c }) => {
         const e: any = { ...ex, name: c.name } // eslint-disable-line @typescript-eslint/no-explicit-any
         if (c.cue) e.coachingNote = [cap(c.cue), e.coachingNote].filter(Boolean).join('. ')
+        // Same exercise under another name: "Bench press" -> "Barbell Bench Press"
+        const al = aliasFor(e.name)
+        if (al) {
+          e.name = al[0]
+          if (al[1]) e.coachingNote = [al[1], e.coachingNote].filter(Boolean).join('. ')
+        }
         if (c.alts.length) e.alts = Array.from(new Set([...(e.alts ?? []), ...c.alts]))
         const grouped = ex.section && /SUPERSET|SUPER SET|COMPLEX|CIRCUIT|TRI-?SET|GIANT SET/i.test(ex.section)
         if (c.pair && (pairs.get(`${ex.section ?? ''}|${c.pair}`) ?? 0) >= 2 && !grouped) {

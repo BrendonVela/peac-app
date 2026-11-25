@@ -54,7 +54,7 @@ export async function prepareImport(supabase: any, coachId: string, weeks: Parse
   // Exact title -> id for everything (so no-video exercises are reused, not duplicated)
   const titleToId = new Map<string, string>()
   for (const ex of existingExercises || []) {
-    titleToId.set(ex.title.trim().toLowerCase(), ex.id)
+    titleToId.set(ex.title.replace(/\s+/g, ' ').trim().toLowerCase(), ex.id)
   }
 
   const nameToId = new Map<string, string>()
@@ -62,7 +62,7 @@ export async function prepareImport(supabase: any, coachId: string, weeks: Parse
   let createdCount = 0
 
    for (const [name, section] of Array.from(nameToSection.entries())) {
-    const key = name.trim().toLowerCase()
+    const key = name.replace(/\s+/g, ' ').trim().toLowerCase()
     if (nameToId.has(key)) continue
 
     // 1. Try to link to a library exercise with a video
