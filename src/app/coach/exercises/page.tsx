@@ -30,7 +30,7 @@ const CATEGORY_COLORS: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'pur
 function getYouTubeEmbedUrl(url: string): string | null {
   if (!url) return null
   const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|studio\.youtube\.com\/video\/)([a-zA-Z0-9_-]{11})/
   )
   return match ? `https://www.youtube.com/embed/${match[1]}` : null
 }
